@@ -3562,7 +3562,7 @@ RPCHelpMan getaddressinfo()
 
     if (provider) {
         auto inferred = InferDescriptor(scriptPubKey, *provider);
-        bool solvable = inferred->IsSolvable() || IsSolvable(*provider, scriptPubKey);
+        bool solvable = inferred->IsSolvable() || IsSolvable(*provider, scriptPubKey, false) || IsSolvable(*provider, scriptPubKey, true);
         ret.pushKV("solvable", solvable);
         if (solvable) {
             ret.pushKV("desc", inferred->ToString());

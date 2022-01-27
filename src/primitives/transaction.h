@@ -162,6 +162,8 @@ public:
         return !(a == b);
     }
 
+    bool IsEmpty() const { return (nValue == 0 && scriptPubKey.empty()); }
+
     std::string ToString() const;
 };
 
@@ -189,6 +191,7 @@ inline void UnserializeTransaction(TxType& tx, Stream& s) {
     const bool fAllowWitness = !(s.GetVersion() & SERIALIZE_TRANSACTION_NO_WITNESS);
 
     s >> tx.nVersion;
+    s >> tx.nTime;
     unsigned char flags = 0;
     tx.vin.clear();
     tx.vout.clear();
@@ -242,6 +245,7 @@ inline void SerializeTransaction(const TxType& tx, Stream& s) {
         s << vinDummy;
         s << flags;
     }
+    s << tx.nTime;
     s << tx.vin;
     s << tx.vout;
     if (flags & 1) {
@@ -267,6 +271,7 @@ public:
     // actually immutable; deserialization and assignment are implemented,
     // and bypass the constness. This is safe, as they update the entire
     // structure, including the hash.
+    uint32_t nTime;
     const std::vector<CTxIn> vin;
     const std::vector<CTxOut> vout;
     const int32_t nVersion;
@@ -338,11 +343,18 @@ public:
         }
         return false;
     }
+
+    bool IsCoinStake() const
+    {
+        // Neblio: the coin stake transaction is marked with the first output empty
+        return (vin.size() > 0 && (!vin[0].prevout.IsNull()) && vout.size() >= 2 && vout[0].IsEmpty());
+    }
 };
 
 /** A mutable version of CTransaction. */
 struct CMutableTransaction
 {
+    uint32_t nTime;
     std::vector<CTxIn> vin;
     std::vector<CTxOut> vout;
     int32_t nVersion;
@@ -380,6 +392,12 @@ struct CMutableTransaction
             }
         }
         return false;
+    }
+
+    bool IsCoinStake() const
+    {
+        // Neblio: the coin stake transaction is marked with the first output empty
+        return (vin.size() > 0 && (!vin[0].prevout.IsNull()) && vout.size() >= 2 && vout[0].IsEmpty());
     }
 };
 

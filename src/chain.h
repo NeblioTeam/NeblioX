@@ -207,6 +207,26 @@ public:
     //! (memory only) Maximum nTime in the chain up to and including this block.
     unsigned int nTimeMax{0};
 
+    // proof-of-stake specific fields
+    // peercoin
+    // peercoin: money supply related block index fields
+    int64_t nMint{0};
+    int64_t nMoneySupply{0};
+
+    // peercoin: proof-of-stake related block index fields
+    unsigned int nFlags{0};  // peercoin: block index flags
+    enum
+    {
+        BLOCK_PROOF_OF_STAKE = (1 << 0), // is proof-of-stake block
+        BLOCK_STAKE_ENTROPY  = (1 << 1), // entropy bit for stake modifier
+        BLOCK_STAKE_MODIFIER = (1 << 2), // regenerated stake modifier
+    };
+    uint64_t nStakeModifier{0}; // hash modifier for proof-of-stake
+    unsigned int nStakeModifierChecksum{0}; // checksum of index; in-memeory only
+    COutPoint prevoutStake{};
+    unsigned int nStakeTime{0};
+    uint256 hashProofOfStake{};
+
     CBlockIndex()
     {
     }
@@ -299,6 +319,12 @@ public:
             GetBlockHash().ToString());
     }
 
+    bool IsProofOfWork() const { return !(nFlags & BLOCK_PROOF_OF_STAKE); }
+
+    bool IsProofOfStake() const { return (nFlags & BLOCK_PROOF_OF_STAKE); }
+
+    void SetProofOfStake() { nFlags |= BLOCK_PROOF_OF_STAKE; }
+
     //! Check whether this block index entry is valid up to the passed validity level.
     bool IsValid(enum BlockStatus nUpTo = BLOCK_VALID_TRANSACTIONS) const
     {
@@ -338,6 +364,10 @@ public:
     //! Efficiently find an ancestor of this block.
     CBlockIndex* GetAncestor(int height);
     const CBlockIndex* GetAncestor(int height) const;
+    bool GeneratedStakeModifier() const;
+    uint32_t GetStakeEntropyBit() const;
+    bool SetStakeEntropyBit(uint32_t nEntropyBit);
+    void SetStakeModifier(uint64_t nModifier, bool fGeneratedStakeModifier);
 };
 
 arith_uint256 GetBlockProof(const CBlockIndex& block);
@@ -373,6 +403,17 @@ public:
         if (obj.nStatus & BLOCK_HAVE_DATA) READWRITE(VARINT(obj.nDataPos));
         if (obj.nStatus & BLOCK_HAVE_UNDO) READWRITE(VARINT(obj.nUndoPos));
 
+        READWRITE(obj.nMint);
+        READWRITE(obj.nMoneySupply);
+        READWRITE(obj.nFlags);
+        READWRITE(obj.nStakeModifier);
+        if (obj.nFlags & BLOCK_PROOF_OF_STAKE)
+        {
+            READWRITE(obj.prevoutStake);
+            READWRITE(obj.nStakeTime);
+            READWRITE(obj.hashProofOfStake);
+        }
+
         // block header
         READWRITE(obj.nVersion);
         READWRITE(obj.hashPrev);
@@ -380,6 +421,8 @@ public:
         READWRITE(obj.nTime);
         READWRITE(obj.nBits);
         READWRITE(obj.nNonce);
+
+        READWRITE(obj.nFlags);
     }
 
     uint256 GetBlockHash() const

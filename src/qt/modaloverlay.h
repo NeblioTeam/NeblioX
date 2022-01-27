@@ -51,7 +51,7 @@ private:
     bool layerIsVisible;
     bool userClosed;
     QPropertyAnimation m_animation;
-    void UpdateHeaderSyncLabel();
+    void UpdateHeaderSyncLabel(int count);
 };
 
 #endif // BITCOIN_QT_MODALOVERLAY_H

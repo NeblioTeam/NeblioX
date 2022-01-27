@@ -34,6 +34,8 @@ void initialize_tx_pool()
     static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
     g_setup = testing_setup.get();
 
+    const int COINBASE_MATURITY = 100;
+
     for (int i = 0; i < 2 * COINBASE_MATURITY; ++i) {
         CTxIn in = MineBlock(g_setup->m_node, P2WSH_OP_TRUE);
         // Remember the txids to avoid expensive disk access later on
@@ -81,7 +83,9 @@ void SetMempoolConstraints(ArgsManager& args, FuzzedDataProvider& fuzzed_data_pr
 
 void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, CChainState& chainstate)
 {
-    WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
+    const int COINBASE_MATURITY = 100;
+
+    WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1, COINBASE_MATURITY));
     {
         BlockAssembler::Options options;
         options.nBlockMaxWeight = fuzzed_data_provider.ConsumeIntegralInRange(0U, MAX_BLOCK_WEIGHT);
@@ -97,7 +101,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, CCh
         std::vector<uint256> all_txids;
         tx_pool.queryHashes(all_txids);
         assert(all_txids.size() < info_all.size());
-        WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
+        WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1, COINBASE_MATURITY));
     }
     SyncWithValidationInterfaceQueue();
 }
@@ -127,6 +131,8 @@ FUZZ_TARGET_INIT(tx_pool_standard, initialize_tx_pool)
         Assert(outpoints_supply.insert(outpoint).second);
     }
     outpoints_rbf = outpoints_supply;
+
+    const int COINBASE_MATURITY = 100;
 
     // The sum of the values of all spendable outpoints
     constexpr CAmount SUPPLY_TOTAL{COINBASE_MATURITY * 50 * COIN};

@@ -28,12 +28,16 @@ public:
     uint32_t nBits;
     uint32_t nNonce;
 
+    static const int32_t NORMAL_SERIALIZE_SIZE=80;
+
     CBlockHeader()
     {
         SetNull();
     }
 
-    SERIALIZE_METHODS(CBlockHeader, obj) { READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nNonce); }
+    SERIALIZE_METHODS(CBlockHeader, obj) {
+        READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nNonce);
+    }
 
     void SetNull()
     {
@@ -65,6 +69,9 @@ public:
     // network and disk
     std::vector<CTransactionRef> vtx;
 
+    // peercoin: block signature - signed by coin base txout[0]'s owner
+    std::vector<uint8_t> vchBlockSig;
+
     // memory only
     mutable bool fChecked;
 
@@ -83,12 +90,14 @@ public:
     {
         READWRITEAS(CBlockHeader, obj);
         READWRITE(obj.vtx);
+        READWRITE(obj.vchBlockSig);
     }
 
     void SetNull()
     {
         CBlockHeader::SetNull();
         vtx.clear();
+        vchBlockSig.clear();
         fChecked = false;
     }
 
@@ -104,7 +113,12 @@ public:
         return block;
     }
 
+    bool IsProofOfStake() const;
+    bool IsProofOfWork() const;
+
     std::string ToString() const;
+
+    static unsigned int GetStakeEntropyBit(const uint256& hash);
 };
 
 /** Describes a place in the block chain to another node such that if the

@@ -192,6 +192,8 @@ enum class SigVersion
     TAPSCRIPT = 3,   //!< Witness v1 with 32-byte program, not BIP16 P2SH-wrapped, script path spending, leaf version 0xc0; see BIP 342
 };
 
+bool CheckPubKeyEncoding(const std::vector<unsigned char> &vchPubKey, unsigned int flags, const SigVersion &sigversion, ScriptError* serror);
+
 struct ScriptExecutionData
 {
     //! Whether m_tapleaf_hash is initialized.
@@ -259,6 +261,11 @@ public:
          return false;
     }
 
+    virtual bool CheckColdStake(const CScript& script) const
+    {
+        return false;
+    }
+
     virtual ~BaseSignatureChecker() {}
 };
 
@@ -295,6 +302,7 @@ public:
     bool CheckSchnorrSignature(Span<const unsigned char> sig, Span<const unsigned char> pubkey, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror = nullptr) const override;
     bool CheckLockTime(const CScriptNum& nLockTime) const override;
     bool CheckSequence(const CScriptNum& nSequence) const override;
+    bool CheckColdStake(const CScript &script) const override;
 };
 
 using TransactionSignatureChecker = GenericTransactionSignatureChecker<CTransaction>;

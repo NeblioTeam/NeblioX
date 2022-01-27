@@ -146,13 +146,19 @@ double base_uint<BITS>::getdouble() const
 template <unsigned int BITS>
 std::string base_uint<BITS>::GetHex() const
 {
-    return ArithToUint256(*this).GetHex();
+    base_blob<BITS> b;
+    for(int x=0; x<this->WIDTH; ++x)
+        WriteLE32(b.begin() + x*4, this->pn[x]);
+    return b.GetHex();
 }
 
 template <unsigned int BITS>
 void base_uint<BITS>::SetHex(const char* psz)
 {
-    *this = UintToArith256(uint256S(psz));
+    base_blob<BITS> b;
+    b.SetHex(psz);
+    for(int x=0; x<this->WIDTH; ++x)
+        this->pn[x] = ReadLE32(b.begin() + x*4);
 }
 
 template <unsigned int BITS>
@@ -164,7 +170,7 @@ void base_uint<BITS>::SetHex(const std::string& str)
 template <unsigned int BITS>
 std::string base_uint<BITS>::ToString() const
 {
-    return (GetHex());
+    return GetHex();
 }
 
 template <unsigned int BITS>
@@ -197,6 +203,23 @@ template std::string base_uint<256>::ToString() const;
 template void base_uint<256>::SetHex(const char*);
 template void base_uint<256>::SetHex(const std::string&);
 template unsigned int base_uint<256>::bits() const;
+
+// Explicit instantiations for base_uint<512>
+template base_uint<512>::base_uint(const std::string&);
+template base_uint<512>& base_uint<512>::operator<<=(unsigned int);
+template base_uint<512>& base_uint<512>::operator>>=(unsigned int);
+template base_uint<512>& base_uint<512>::operator*=(uint32_t b32);
+template base_uint<512>& base_uint<512>::operator*=(const base_uint<512>& b);
+template base_uint<512>& base_uint<512>::operator/=(const base_uint<512>& b);
+template int base_uint<512>::CompareTo(const base_uint<512>&) const;
+template bool base_uint<512>::EqualTo(uint64_t) const;
+template double base_uint<512>::getdouble() const;
+template std::string base_uint<512>::GetHex() const;
+template std::string base_uint<512>::ToString() const;
+template void base_uint<512>::SetHex(const char*);
+template void base_uint<512>::SetHex(const std::string&);
+template unsigned int base_uint<512>::bits() const;
+
 
 // This implementation directly uses shifts instead of going
 // through an intermediate MPI representation.

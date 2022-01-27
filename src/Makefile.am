@@ -371,6 +371,8 @@ libbitcoin_server_a_SOURCES = \
   txorphanage.cpp \
   txrequest.cpp \
   validation.cpp \
+  pos/kernel.cpp \
+  validation_pos.cpp \
   validationinterface.cpp \
   versionbits.cpp \
   $(BITCOIN_CORE_H)
@@ -521,6 +523,9 @@ libbitcoin_consensus_a_SOURCES = \
   script/script.h \
   script/script_error.cpp \
   script/script_error.h \
+  crypto/scrypt.cpp \
+  crypto/scrypt-sse2.cpp \
+  crypto/scrypt.h \
   serialize.h \
   span.h \
   tinyformat.h \

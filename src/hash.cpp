@@ -94,3 +94,12 @@ CHashWriter TaggedHash(const std::string& tag)
     writer << taghash << taghash;
     return writer;
 }
+
+int32_t peercoinRandseed;
+uint32_t univHash(const uint256 &x) {
+    int h = peercoinRandseed >> 20;
+    const uint32_t *p = (const uint32_t *)x.data();
+    for(int i = 0; i < 8; i++)
+        h ^=  (p[i] >> (h & 0xf)) + (peercoinRandseed >> i);
+    return (h + (h >> 16))  & 1023; // 2^n - 1
+}

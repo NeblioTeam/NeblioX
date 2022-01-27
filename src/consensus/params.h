@@ -8,6 +8,8 @@
 
 #include <uint256.h>
 #include <limits>
+#include <map>
+#include <set>
 
 namespace Consensus {
 
@@ -74,7 +76,6 @@ struct Params {
     uint256 BIP16Exception;
     /** Block height and hash at which BIP34 becomes active */
     int BIP34Height;
-    uint256 BIP34Hash;
     /** Block height at which BIP65 becomes active */
     int BIP65Height;
     /** Block height at which BIP66 becomes active */
@@ -98,15 +99,44 @@ struct Params {
     BIP9Deployment vDeployments[MAX_VERSION_BITS_DEPLOYMENTS];
     /** Proof of work parameters */
     uint256 powLimit;
+    uint256 posLimit;
     bool fPowAllowMinDifficultyBlocks;
     bool fPowNoRetargeting;
-    int64_t nPowTargetSpacing;
+    int nLastPoWBlock;
+    int nFork2ConfsChangedHeight;
+    int nFork3TachyonHeight;
+    int nFork4RetargetCorrectHeight;
+    int nFork5ColdStaking;
+    int64_t nTargetTimespan;
+    int64_t nStakeTargetSpacingV1;
+    int64_t nStakeTargetSpacingV2;
     int64_t nPowTargetTimespan;
-    int64_t DifficultyAdjustmentInterval() const { return nPowTargetTimespan / nPowTargetSpacing; }
+    //    int64_t DifficultyAdjustmentInterval() const { return nPowTargetTimespan / nPowTargetSpacing; }
     /** The best chain should have at least this much work */
     uint256 nMinimumChainWork;
     /** By default assume that the signatures in ancestors of this block are valid */
     uint256 defaultAssumeValid;
+
+    // Coinbase transaction outputs can only be spent after this number of new blocks (network rule)
+    int nCoinbaseMaturityV3;
+    int nCoinbaseMaturityV2;
+    int nCoinbaseMaturityV1;
+
+    int64_t nStakeMinAgeV2;
+    int64_t nStakeMinAgeV1;
+    int64_t nStakeMaxAge;
+    int64_t nModifierInterval;
+
+    std::optional<std::set<int>> powHeights;
+
+    using MapStakeModifierCheckpoints = std::map<int, unsigned int>;
+    //! Hard checkpoints of stake modifiers to ensure they are deterministic
+    MapStakeModifierCheckpoints mapStakeModifierCheckpoints;
+
+    const MapStakeModifierCheckpoints& StakeModifierCheckpoints() const
+    {
+        return mapStakeModifierCheckpoints;
+    }
 
     /**
      * If true, witness commitments contain a payload equal to a Bitcoin Script solution
@@ -114,6 +144,39 @@ struct Params {
      */
     bool signet_blocks{false};
     std::vector<uint8_t> signet_challenge;
+
+    unsigned int TargetSpacing(int height) const
+    {
+        if (height >= nFork3TachyonHeight) {
+            return nStakeTargetSpacingV2;
+        } else {
+            return nStakeTargetSpacingV1;
+        }
+    }
+
+    int64_t StakeMinAge(int height) const
+    {
+        if (height >= nFork3TachyonHeight) {
+            return nStakeMinAgeV2;
+        } else {
+            return nStakeMinAgeV1;
+        }
+    }
+
+    int64_t StakeMaxAge() const { return nStakeMaxAge; }
+
+    int CoinbaseMaturity(int height) const
+    {
+        if (height >= nFork3TachyonHeight) {
+            return nCoinbaseMaturityV3;
+        } else if (height >= nFork2ConfsChangedHeight) {
+            return nCoinbaseMaturityV2;
+        } else {
+            return nCoinbaseMaturityV1;
+        }
+    }
+
+    int64_t StakeModifierInterval() const { return nModifierInterval; }
 
     int DeploymentHeight(BuriedDeployment dep) const
     {

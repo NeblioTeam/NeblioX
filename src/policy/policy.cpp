@@ -8,8 +8,10 @@
 #include <policy/policy.h>
 
 #include <consensus/validation.h>
+#include <validation_pos.h>
 #include <coins.h>
 #include <span.h>
+#include <util/time.h>
 
 CAmount GetDustThreshold(const CTxOut& txout, const CFeeRate& dustRelayFeeIn)
 {
@@ -82,6 +84,12 @@ bool IsStandardTx(const CTransaction& tx, bool permit_bare_multisig, const CFeeR
 {
     if (tx.nVersion > TX_MAX_STANDARD_VERSION || tx.nVersion < 1) {
         reason = "version";
+        return false;
+    }
+
+    // Neblio: nTime has different purpose from nLockTime but can be used in similar attacks
+    if (tx.nTime > FutureDrift(GetTimeSeconds())) {
+        reason = "time-too-new";
         return false;
     }
 

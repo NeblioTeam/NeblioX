@@ -36,12 +36,18 @@ public:
     //! whether containing transaction was a coinbase
     unsigned int fCoinBase : 1;
 
+    // peercoin: whether transaction is a coinstake
+    bool fCoinStake;
+
+    // peercoin: transaction timestamp
+    uint32_t nTime;
+
     //! at which height this containing transaction was included in the active block chain
     uint32_t nHeight : 31;
 
     //! construct a Coin from a CTxOut and height/coinbase information.
-    Coin(CTxOut&& outIn, int nHeightIn, bool fCoinBaseIn) : out(std::move(outIn)), fCoinBase(fCoinBaseIn), nHeight(nHeightIn) {}
-    Coin(const CTxOut& outIn, int nHeightIn, bool fCoinBaseIn) : out(outIn), fCoinBase(fCoinBaseIn),nHeight(nHeightIn) {}
+    Coin(CTxOut&& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn, uint32_t nTimeIn) : out(std::move(outIn)), fCoinBase(fCoinBaseIn), fCoinStake(fCoinStakeIn), nTime(nTimeIn), nHeight(nHeightIn) {}
+    Coin(const CTxOut& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn, uint32_t nTimeIn) : out(outIn), fCoinBase(fCoinBaseIn), fCoinStake(fCoinStakeIn), nTime(nTimeIn), nHeight(nHeightIn) {}
 
     void Clear() {
         out.SetNull();
@@ -56,12 +62,21 @@ public:
         return fCoinBase;
     }
 
+    bool IsCoinStake() const { // peercoin: coinstake
+        return fCoinStake;
+    }
+
     template<typename Stream>
     void Serialize(Stream &s) const {
         assert(!IsSpent());
         uint32_t code = nHeight * uint32_t{2} + fCoinBase;
         ::Serialize(s, VARINT(code));
         ::Serialize(s, Using<TxOutCompression>(out));
+        // Neblio flags
+        unsigned int nFlag = fCoinStake? 1 : 0;
+        ::Serialize(s, VARINT(nFlag));
+        // Neblio transaction timestamp
+        ::Serialize(s, VARINT(nTime));
     }
 
     template<typename Stream>
@@ -71,6 +86,12 @@ public:
         nHeight = code >> 1;
         fCoinBase = code & 1;
         ::Unserialize(s, Using<TxOutCompression>(out));
+        // Neblio flags
+        unsigned int nFlag = 0;
+        ::Unserialize(s, VARINT(nFlag));
+        fCoinStake = nFlag & 1;
+        // Neblio transaction timestamp
+        ::Unserialize(s, VARINT(nTime));
     }
 
     /** Either this coin never existed (see e.g. coinEmpty in coins.cpp), or it
@@ -300,6 +321,16 @@ public:
 
     //! Calculate the size of the cache (in bytes)
     size_t DynamicMemoryUsage() const;
+
+    /**
+     * Amount of bitcoins coming in to a transaction
+     * Note that lightweight clients may not know anything besides the hash of previous transactions,
+     * so may not be able to calculate this.
+     *
+     * @param[in] tx    transaction for which we are checking input total
+     * @return  Sum of value of all inputs (scriptSigs)
+     */
+    CAmount GetValueIn(const CTransaction& tx) const;
 
     //! Check whether all prevouts of the transaction are present in the UTXO set represented by this view
     bool HaveInputs(const CTransaction& tx) const;

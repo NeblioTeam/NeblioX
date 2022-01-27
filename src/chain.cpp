@@ -105,6 +105,25 @@ const CBlockIndex* CBlockIndex::GetAncestor(int height) const
     return pindexWalk;
 }
 
+bool CBlockIndex::GeneratedStakeModifier() const { return (nFlags & BLOCK_STAKE_MODIFIER); }
+
+uint32_t CBlockIndex::GetStakeEntropyBit() const { return ((nFlags & BLOCK_STAKE_ENTROPY) >> 1); }
+
+bool CBlockIndex::SetStakeEntropyBit(uint32_t nEntropyBit)
+{
+    if (nEntropyBit > 1)
+        return false;
+    nFlags |= (nEntropyBit ? BLOCK_STAKE_ENTROPY : 0);
+    return true;
+}
+
+void CBlockIndex::SetStakeModifier(uint64_t nModifier, bool fGeneratedStakeModifier)
+{
+    nStakeModifier = nModifier;
+    if (fGeneratedStakeModifier)
+        nFlags |= BLOCK_STAKE_MODIFIER;
+}
+
 CBlockIndex* CBlockIndex::GetAncestor(int height)
 {
     return const_cast<CBlockIndex*>(static_cast<const CBlockIndex*>(this)->GetAncestor(height));
@@ -141,7 +160,7 @@ int64_t GetBlockProofEquivalentTime(const CBlockIndex& to, const CBlockIndex& fr
         r = from.nChainWork - to.nChainWork;
         sign = -1;
     }
-    r = r * arith_uint256(params.nPowTargetSpacing) / GetBlockProof(tip);
+    r = r * arith_uint256(params.nStakeTargetSpacingV1) / GetBlockProof(tip);
     if (r.bits() > 63) {
         return sign * std::numeric_limits<int64_t>::max();
     }

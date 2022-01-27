@@ -9,6 +9,8 @@
 
 #include <string>
 
+#include "interpreter.h"
+
 std::string GetOpName(opcodetype opcode)
 {
     switch (opcode)
@@ -231,6 +233,61 @@ bool CScript::IsWitnessProgram(int& version, std::vector<unsigned char>& program
         return true;
     }
     return false;
+}
+
+bool CScript::IsPayToColdStaking() const
+{
+    // Extra-fast test for pay-to-cold-staking CScripts:
+    return (this->size() == 51 &&
+            (*this)[2] == OP_ROT &&
+            (*this)[4] == OP_CHECKCOLDSTAKEVERIFY &&
+            (*this)[5] == 0x14 &&
+            (*this)[27] == 0x14 &&
+            (*this)[49] == OP_EQUALVERIFY &&
+            (*this)[50] == OP_CHECKSIG);
+}
+
+std::optional<std::vector<uint8_t> > CScript::GetPubKeyOfP2CSScriptSig() const
+{
+    CScript::const_iterator           pc = this->begin();
+    opcodetype                        opcode;
+    std::vector<uint8_t>              vchValue;
+    static const std::vector<uint8_t> TRUE_VEC({OP_TRUE});
+
+    if (!GetOp(pc, opcode, vchValue)) {
+        // sig is expected here
+        return std::nullopt;
+    }
+
+    // check that the signature is canonical and valid
+    if (!CheckSignatureEncoding(vchValue, 0, nullptr)) {
+        return std::nullopt;
+    }
+
+    if (!GetOp(pc, opcode, vchValue)) {
+        // we expect a OP_TRUE here
+        return std::nullopt;
+    }
+    if (vchValue != TRUE_VEC) {
+        // if this is false, it's a delegation revocation, it's not what we expect
+        return std::nullopt;
+    }
+    if (!GetOp(pc, opcode, vchValue)) {
+        // we expect the public key here
+        return std::nullopt;
+    }
+
+    // check that public key is valid
+    if (!CheckPubKeyEncoding(vchValue, 0, SigVersion::BASE, nullptr)) {
+        return std::nullopt;
+    }
+    // we extract the public key
+    auto pubKey = std::make_optional(std::move(vchValue));
+    if (GetOp(pc, opcode, vchValue)) {
+        // there should be nothing left, otherwise this is not scriptSig of P2CS
+        return std::nullopt;
+    }
+    return pubKey;
 }
 
 bool CScript::IsPushOnly(const_iterator pc) const

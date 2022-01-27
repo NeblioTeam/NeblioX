@@ -213,6 +213,8 @@ TestChain100Setup::TestChain100Setup(const std::vector<const char*>& extra_args)
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}};
     coinbaseKey.Set(vchKey.begin(), vchKey.end(), true);
 
+    const int COINBASE_MATURITY = 100;
+
     // Generate a 100-block chain:
     this->mineBlocks(COINBASE_MATURITY);
 

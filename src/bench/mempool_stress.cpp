@@ -110,8 +110,10 @@ static void MempoolCheck(benchmark::Bench& bench)
     const CCoinsViewCache& coins_tip = testing_setup.get()->m_node.chainman->ActiveChainstate().CoinsTip();
     for (auto& tx : ordered_coins) AddTx(tx, pool);
 
+    const int COINBASE_MATURITY = 100;
+
     bench.run([&]() NO_THREAD_SAFETY_ANALYSIS {
-        pool.check(coins_tip, /* spendheight */ 2);
+        pool.check(coins_tip, /* spendheight */ 2, COINBASE_MATURITY);
     });
 }
 

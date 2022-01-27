@@ -7,6 +7,8 @@
 
 #include <index/base.h>
 
+class CDiskTxPos;
+
 /**
  * TxIndex is used to look up transactions included in the blockchain by hash.
  * The index is written to a LevelDB database and records the filesystem
@@ -41,6 +43,8 @@ public:
     /// @param[out]  tx  The transaction itself.
     /// @return  true if transaction is found, false otherwise
     bool FindTx(const uint256& tx_hash, uint256& block_hash, CTransactionRef& tx) const;
+
+    bool FindTxPosition(const uint256& txid, CDiskTxPos& pos) const;
 };
 
 /// The global transaction index, used in GetTransaction. May be null.

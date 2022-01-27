@@ -23,6 +23,7 @@ public:
 template<unsigned int BITS>
 class base_uint
 {
+    friend class arith_uint512;
 protected:
     static constexpr int WIDTH = BITS / 32;
     uint32_t pn[WIDTH];
@@ -283,5 +284,28 @@ public:
 
 uint256 ArithToUint256(const arith_uint256 &);
 arith_uint256 UintToArith256(const uint256 &);
+
+class arith_uint512 : public base_uint<512> {
+public:
+    arith_uint512() {}
+    arith_uint512(const base_uint<512>& b) : base_uint<512>(b) {}
+    arith_uint512(const base_uint<256>& b)  {
+        for(int i = 0; i < b.WIDTH; i++) {
+            this->pn[i] = b.pn[i];
+        }
+        for(int i = b.WIDTH+1; i < WIDTH; i++) {
+            this->pn[i] = 0;
+        }
+    }
+    arith_uint512(uint64_t b) : base_uint<512>(b) {}
+    explicit arith_uint512(const std::string& str) : base_uint<512>(str) {}
+    arith_uint256 to_uint256() {
+        arith_uint256 result{0};
+        for(int i = 0; i < WIDTH/2; i++) {
+            result.pn[i] = this->pn[i];
+        }
+        return result;
+    }
+};
 
 #endif // BITCOIN_ARITH_UINT256_H

@@ -252,6 +252,8 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
             BOOST_REQUIRE(ProcessBlock(last_mined));
         }
 
+        const int COINBASE_MATURITY = 100;
+
         // Mature the inputs of the txs
         for (int j = COINBASE_MATURITY; j > 0; --j) {
             last_mined = GoodBlock(last_mined->GetHash());
