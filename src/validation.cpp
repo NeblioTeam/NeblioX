@@ -3531,7 +3531,10 @@ bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& 
 bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock)
 {
     const CBlock& block = *pblock;
-    bool fCheckPoS = true;
+
+    // IsInitialBlockDownload tests (!fImporting && !fReindex)
+    // Blocks are connected at end of import / reindex
+    const bool fCheckPoS = !fImporting && !fReindex;
 
     if (fNewBlock) *fNewBlock = false;
     AssertLockHeld(cs_main);
