@@ -2993,7 +2993,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
         }
 
-        if (best_block != nullptr) {
+        // Info on the edit compared to Bitcoin: Don't ask for headers in initial sync, otherwise
+        // the sync process will keep asking and receiving more blocks forever. Happened with older versions.
+        if (best_block != nullptr && !m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), *best_block));
             LogPrint(BCLog::NET, "getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, best_block->ToString(), pfrom.GetId());
         }
