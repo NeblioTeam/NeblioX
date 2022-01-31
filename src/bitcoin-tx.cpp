@@ -215,6 +215,15 @@ static void MutateTxLocktime(CMutableTransaction& tx, const std::string& cmdVal)
     tx.nLockTime = (unsigned int) newLocktime;
 }
 
+static void MutateTxTime(CMutableTransaction& tx, const std::string& cmdVal)
+{
+    int64_t newTime;
+    if (!ParseInt64(cmdVal, &newTime) || newTime < 0LL || newTime > 0xffffffffLL)
+        throw std::runtime_error("Invalid TX time requested: '" + cmdVal + "'");
+
+    tx.nTime = (unsigned int) newTime;
+}
+
 static void MutateTxRBFOptIn(CMutableTransaction& tx, const std::string& strInIdx)
 {
     // parse requested index
@@ -699,7 +708,8 @@ static void MutateTx(CMutableTransaction& tx, const std::string& command,
         MutateTxLocktime(tx, commandVal);
     else if (command == "replaceable") {
         MutateTxRBFOptIn(tx, commandVal);
-    }
+    } else if (command == "ntime")
+        MutateTxTime(tx, commandVal);
 
     else if (command == "delin")
         MutateTxDelInput(tx, commandVal);

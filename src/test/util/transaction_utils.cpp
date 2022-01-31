@@ -6,6 +6,8 @@
 #include <script/signingprovider.h>
 #include <test/util/transaction_utils.h>
 
+// TODO(Sam): All nTime instances for transactions in this file
+
 CMutableTransaction BuildCreditingTransaction(const CScript& scriptPubKey, int nValue)
 {
     CMutableTransaction txCredit;

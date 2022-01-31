@@ -19,6 +19,8 @@
 #include <wallet/transaction.h>
 #include <wallet/wallet.h>
 
+// TODO(Sam): All nTime instances for transactions in this file
+
 using interfaces::FoundBlock;
 
 static constexpr size_t OUTPUT_GROUP_MAX_ENTRIES{100};

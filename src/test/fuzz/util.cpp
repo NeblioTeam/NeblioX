@@ -240,6 +240,7 @@ CMutableTransaction ConsumeTransaction(FuzzedDataProvider& fuzzed_data_provider,
                           CTransaction::CURRENT_VERSION :
                           fuzzed_data_provider.ConsumeIntegral<int32_t>();
     tx_mut.nLockTime = fuzzed_data_provider.ConsumeIntegral<uint32_t>();
+    tx_mut.nTime = fuzzed_data_provider.ConsumeIntegral<uint32_t>();
     const auto num_in = fuzzed_data_provider.ConsumeIntegralInRange<int>(0, max_num_in);
     const auto num_out = fuzzed_data_provider.ConsumeIntegralInRange<int>(0, max_num_out);
     for (int i = 0; i < num_in; ++i) {

@@ -17,6 +17,8 @@
 #include <boost/test/unit_test.hpp>
 #include <random>
 
+// TODO(Sam): All nTime instances for transactions in this file
+
 BOOST_FIXTURE_TEST_SUITE(coinselector_tests, WalletTestingSetup)
 
 // how many times to run all the tests to have a chance to catch errors that only show up with particular random shuffles

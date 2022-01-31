@@ -13,6 +13,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+// TODO(Sam): All nTime instances for transactions in this file
+
 struct Dersig100Setup : public TestChain100Setup {
     Dersig100Setup()
         : TestChain100Setup{{"-testactivationheight=dersig@102"}} {}

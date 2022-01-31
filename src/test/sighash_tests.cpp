@@ -21,6 +21,8 @@
 
 #include <univalue.h>
 
+// TODO(Sam): All nTime instances for transactions in this file
+
 UniValue read_json(const std::string& jsondata);
 
 // Old script.cpp SignatureHash function
