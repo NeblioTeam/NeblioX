@@ -55,7 +55,7 @@ bool PeercoinContextualBlockChecks(CChainState& chain_state, const CBlock &block
     pindex->hashProofOfStake = hashProofOfStakeBackup;
     // compute nStakeModifierChecksum end
 
-    if (!CheckStakeModifierCheckpoints(chain_state, pindex->nHeight, nStakeModifierChecksum))
+    if (!CheckStakeModifierCheckpoints(chain_state.m_params.GetConsensus(), pindex->nHeight, nStakeModifierChecksum))
         return error("ConnectBlock() : Rejected by stake modifier checkpoint height=%d, modifier=0x%016llx", pindex->nHeight, nStakeModifier);
 
     if (fJustCheck)

@@ -407,6 +407,8 @@ public:
         READWRITE(obj.nMoneySupply);
         READWRITE(obj.nFlags);
         READWRITE(obj.nStakeModifier);
+        READWRITE(obj.nStakeModifierChecksum);
+
         if (obj.nFlags & BLOCK_PROOF_OF_STAKE)
         {
             READWRITE(obj.prevoutStake);
@@ -421,8 +423,6 @@ public:
         READWRITE(obj.nTime);
         READWRITE(obj.nBits);
         READWRITE(obj.nNonce);
-
-        READWRITE(obj.nFlags);
     }
 
     uint256 GetBlockHash() const

@@ -561,9 +561,9 @@ uint32_t GetStakeModifierChecksum(CChainState &chain_state, const CBlockIndex* p
 }
 
 // Check stake modifier hard checkpoints
-bool CheckStakeModifierCheckpoints(CChainState &chain_state, int nHeight, unsigned int nStakeModifierChecksum)
+bool CheckStakeModifierCheckpoints(const Consensus::Params& params, int nHeight, unsigned int nStakeModifierChecksum)
 {
-    const Consensus::Params::MapStakeModifierCheckpoints& checkpoints = chain_state.m_params.GetConsensus().StakeModifierCheckpoints();
+    const Consensus::Params::MapStakeModifierCheckpoints& checkpoints = params.StakeModifierCheckpoints();
 
     auto it = checkpoints.find(nHeight);
     if (it != checkpoints.cend())

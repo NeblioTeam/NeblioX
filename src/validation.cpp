@@ -4299,6 +4299,15 @@ bool ChainstateManager::LoadBlockIndex()
         needs_init = m_blockman.m_block_index.empty();
     }
 
+    // Neblio: test stake modifier checksums
+    const auto& stakeModifierCheckpoints = Params().GetConsensus().StakeModifierCheckpoints();
+    for(const auto& cp: stakeModifierCheckpoints) {
+        if (const CBlockIndex* pindex = ActiveChain()[cp.first])
+            if (!CheckStakeModifierCheckpoints(Params().GetConsensus(), pindex->nHeight, pindex->nStakeModifierChecksum))
+                return error("LoadBlockIndex() : Failed stake modifier checkpoint height=%d, modifier=0x%016llx", pindex->nHeight, pindex->nStakeModifier);
+    }
+
+
     if (needs_init) {
         // Everything here is for *new* reindex/DBs. Thus, though
         // LoadBlockIndexDB may have set fReindex if we shut down
