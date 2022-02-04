@@ -17,29 +17,29 @@ class CBlockIndex;
 static const int MODIFIER_INTERVAL_RATIO = 3;
 
 // Compute the hash modifier for proof-of-stake
-bool ComputeNextStakeModifier(CChainState &chain_state, BlockValidationState &state,
+bool ComputeNextStakeModifier(const CChainState &chain_state, BlockValidationState &state,
                               const CBlockIndex* pindexPrev, uint64_t& nStakeModifier,
                               bool& fGeneratedStakeModifier);
 
 // Check whether stake kernel meets hash target
 // Sets hashProofOfStake on success return
-bool CheckStakeKernelHash(CChainState &chain_state, BlockValidationState &state, const CBlockIndex *pindexPrev,
+bool CheckStakeKernelHash(const CChainState &chain_state, BlockValidationState &state, const CBlockIndex *pindexPrev,
                           unsigned int nBits, const CBlockIndex& blockIndexKernel, unsigned int nTxPrevOffset,
                           const CTransaction& txPrev, const COutPoint& prevout, unsigned int nTimeTx,
-                          uint256& hashProofOfStake, arith_uint256& targetProofOfStake,
+                          uint256& hashProofOfStake,
                           bool fPrintProofOfStake = false);
 
 // Check kernel hash target and coinstake signature
 // Sets hashProofOfStake on success return
-bool CheckProofOfStake(CChainState &chain_state, BlockValidationState &state, const CBlockIndex *pindexPrev,
-                       const CTransaction& tx, unsigned int nBits, uint256& hashProofOfStake,
-                       arith_uint256 &targetProofOfStake);
+bool CheckProofOfStake(const CChainState &chain_state, BlockValidationState &state, const CBlockIndex *pindexPrev,
+                       const CTransaction& tx, unsigned int nBits, uint256& hashProofOfStake);
 
 // Check whether the coinstake timestamp meets protocol
 bool CheckCoinStakeTimestamp(int64_t nTimeBlock, int64_t nTimeTx);
 
 // Get stake modifier checksum
-uint32_t GetStakeModifierChecksum(CChainState &chain_state, const CBlockIndex* pindex);
+uint32_t GetStakeModifierChecksum(const CChainState &chain_state, const CBlockIndex* pindex);
+uint32_t GetStakeModifierChecksum(const std::optional<uint32_t>& prevModifierChecksum, bool isProofOfStake, const uint256& hashProofOfStake, const uint64_t currentStakeModifier, const uint32_t nFlags);
 
 // Check stake modifier hard checkpoints
 bool CheckStakeModifierCheckpoints(const Consensus::Params& params, int nHeight, unsigned int nStakeModifierChecksum);

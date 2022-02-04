@@ -64,6 +64,7 @@
 #include <string>
 
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/scope_exit.hpp>
 
 #define MICRO 0.000001
 #define MILLI 0.001
@@ -1331,7 +1332,7 @@ void CChainState::InvalidBlockFound(CBlockIndex* pindex, const BlockValidationSt
     }
 }
 
-void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txundo, int nHeight)
+void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txundo, int nHeight, uint32_t txOffset)
 {
     // mark inputs spent
     if (!tx.IsCoinBase()) {
@@ -1343,7 +1344,7 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txund
         }
     }
     // add outputs
-    AddCoins(inputs, tx, nHeight);
+    AddCoins(inputs, tx, nHeight, txOffset);
 }
 
 bool CScriptCheck::operator()() {
@@ -1683,9 +1684,17 @@ BlockValueInsAndOuts CalculateBlockValues(const CBlock& block, CCoinsViewCache& 
     CCoinsViewCache viewIn(&view);
     BlockValueInsAndOuts result;
     CBlockUndo blockundo;
+
+    const std::uint32_t blockHeaderSize = ::GetSerializeSize(block.GetBlockHeader());
+    std::uint32_t txPos = GetSizeOfCompactSize(block.vtx.size());
+
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = *(block.vtx[i]);
+
+        BOOST_SCOPE_EXIT_ALL(&) {
+            txPos += ::GetSerializeSize(tx);
+        };
 
         if (tx.IsCoinBase()) {
             result.totalValueOut += tx.GetValueOut();
@@ -1710,7 +1719,7 @@ BlockValueInsAndOuts CalculateBlockValues(const CBlock& block, CCoinsViewCache& 
             if (i > 0) {
                 blockundo.vtxundo.push_back(CTxUndo());
             }
-            UpdateCoins(tx, viewIn, i == 0 ? undoDummy : blockundo.vtxundo.back(), currentHeight);
+            UpdateCoins(tx, viewIn, i == 0 ? undoDummy : blockundo.vtxundo.back(), currentHeight, blockHeaderSize + txPos);
         }
     }
     return result;
@@ -1918,7 +1927,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     if (block.IsProofOfStake()) {
         // Neblio: coin stake tx earns reward instead of paying fee
         uint64_t nCoinAge;
-        if (!GetCoinAge(*block.vtx[1], view, nCoinAge, m_params.GetConsensus().StakeMinAge(pindex->nHeight))) {
+        if (!GetCoinAge(*this, *block.vtx[1], view, nCoinAge, m_params.GetConsensus().StakeMinAge(pindex->nHeight))) {
             return error("ConnectBlock() : %s unable to get coin age for coinstake",
                          block.vtx[1]->GetHash().ToString());
         }
@@ -1934,9 +1943,17 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     int nInputs = 0;
     int64_t nSigOpsCost = 0;
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
+
+    const std::uint32_t blockHeaderSize = ::GetSerializeSize(block.GetBlockHeader());
+    std::uint32_t txPos = GetSizeOfCompactSize(block.vtx.size());
+
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = *(block.vtx[i]);
+
+        BOOST_SCOPE_EXIT_ALL(&) {
+            txPos += ::GetSerializeSize(tx);
+        };
 
         nInputs += tx.vin.size();
 
@@ -2000,7 +2017,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         if (i > 0) {
             blockundo.vtxundo.push_back(CTxUndo());
         }
-        UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
+        UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight, blockHeaderSize + txPos);
     }
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
@@ -4165,14 +4182,21 @@ bool CChainState::RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& i
         return error("ReplayBlock(): ReadBlockFromDisk failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
     }
 
+    const std::uint32_t blockHeaderSize = ::GetSerializeSize(block.GetBlockHeader());
+    std::uint32_t txOffset = GetSizeOfCompactSize(block.vtx.size());
+
     for (const CTransactionRef& tx : block.vtx) {
+        BOOST_SCOPE_EXIT_ALL(&) {
+            txOffset += ::GetSerializeSize(tx);
+        };
+
         if (!tx->IsCoinBase()) {
             for (const CTxIn &txin : tx->vin) {
                 inputs.SpendCoin(txin.prevout);
             }
         }
         // Pass check = true as every addition may be an overwrite.
-        AddCoins(inputs, *tx, pindex->nHeight, true);
+        AddCoins(inputs, *tx, pindex->nHeight, blockHeaderSize + txOffset, true);
     }
     return true;
 }
@@ -4302,9 +4326,13 @@ bool ChainstateManager::LoadBlockIndex()
     // Neblio: test stake modifier checksums
     const auto& stakeModifierCheckpoints = Params().GetConsensus().StakeModifierCheckpoints();
     for(const auto& cp: stakeModifierCheckpoints) {
-        if (const CBlockIndex* pindex = ActiveChain()[cp.first])
+        if (const CBlockIndex* pindex = ActiveChain()[cp.first]) {
             if (!CheckStakeModifierCheckpoints(Params().GetConsensus(), pindex->nHeight, pindex->nStakeModifierChecksum))
                 return error("LoadBlockIndex() : Failed stake modifier checkpoint height=%d, modifier=0x%016llx", pindex->nHeight, pindex->nStakeModifier);
+            const uint64_t calculatedChecksum = GetStakeModifierChecksum(ActiveChainstate(), pindex);
+            if (!CheckStakeModifierCheckpoints(Params().GetConsensus(), pindex->nHeight, calculatedChecksum))
+                return error("LoadBlockIndex() : Failed calculated stake modifier checkpoint height=%d, modifier=0x%016llx", pindex->nHeight, pindex->nStakeModifier);
+        }
     }
 
 

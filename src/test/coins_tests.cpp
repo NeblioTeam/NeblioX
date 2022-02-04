@@ -19,7 +19,7 @@
 #include <boost/test/unit_test.hpp>
 
 int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out);
-void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txundo, int nHeight);
+void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txundo, int nHeight, uint32_t txOffset);
 
 namespace
 {
@@ -393,11 +393,11 @@ BOOST_AUTO_TEST_CASE(updatecoins_simulation_test)
             // Update the expected result to know about the new output coins
             assert(tx.vout.size() == 1);
             const COutPoint outpoint(tx.GetHash(), 0);
-            result[outpoint] = Coin(tx.vout[0], height, CTransaction(tx).IsCoinBase(), CTransaction(tx).IsCoinStake(), tx.nTime);
+            result[outpoint] = Coin(tx.vout[0], height, CTransaction(tx).IsCoinBase(), CTransaction(tx).IsCoinStake(), tx.nTime, 0u);
 
             // Call UpdateCoins on the top cache
             CTxUndo undo;
-            UpdateCoins(CTransaction(tx), *(stack.back()), undo, height);
+            UpdateCoins(CTransaction(tx), *(stack.back()), undo, height, 0u);
 
             // Update the utxo set for future spends
             utxoset.insert(outpoint);
@@ -739,7 +739,7 @@ static void CheckAddCoinBase(CAmount base_value, CAmount cache_value, CAmount mo
     try {
         CTxOut output;
         output.nValue = modify_value;
-        test.cache.AddCoin(OUTPOINT, Coin(std::move(output), 1, coinbase, false, GetTimeSeconds()), coinbase);
+        test.cache.AddCoin(OUTPOINT, Coin(std::move(output), 1, coinbase, false, GetTimeSeconds(), 0u), coinbase);
         test.cache.SelfTest();
         GetCoinsMapEntry(test.cache.map(), result_value, result_flags);
     } catch (std::logic_error&) {

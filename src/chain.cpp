@@ -109,12 +109,9 @@ bool CBlockIndex::GeneratedStakeModifier() const { return (nFlags & BLOCK_STAKE_
 
 uint32_t CBlockIndex::GetStakeEntropyBit() const { return ((nFlags & BLOCK_STAKE_ENTROPY) >> 1); }
 
-bool CBlockIndex::SetStakeEntropyBit(uint32_t nEntropyBit)
+void CBlockIndex::SetStakeEntropyBit(bool nEntropyBit)
 {
-    if (nEntropyBit > 1)
-        return false;
     nFlags |= (nEntropyBit ? BLOCK_STAKE_ENTROPY : 0);
-    return true;
 }
 
 void CBlockIndex::SetStakeModifier(uint64_t nModifier, bool fGeneratedStakeModifier)
@@ -122,6 +119,13 @@ void CBlockIndex::SetStakeModifier(uint64_t nModifier, bool fGeneratedStakeModif
     nStakeModifier = nModifier;
     if (fGeneratedStakeModifier)
         nFlags |= BLOCK_STAKE_MODIFIER;
+}
+
+uint32_t CBlockIndex::ConstructFlags(bool isProofOfStake, bool stakeEntropyBit, bool generatedStakeModifier)
+{
+    return ((uint32_t)isProofOfStake         << BLOCK_PROOF_OF_STAKE_BIT) |
+           ((uint32_t)stakeEntropyBit        << BLOCK_STAKE_ENTROPY_BIT) |
+           ((uint32_t)generatedStakeModifier << BLOCK_STAKE_MODIFIER_BIT);
 }
 
 CBlockIndex* CBlockIndex::GetAncestor(int height)

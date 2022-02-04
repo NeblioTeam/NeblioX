@@ -12,6 +12,7 @@
 #include <primitives/block.h>
 #include <tinyformat.h>
 #include <uint256.h>
+#include <util/moneystr.h>
 
 #include <vector>
 
@@ -208,21 +209,24 @@ public:
     unsigned int nTimeMax{0};
 
     // proof-of-stake specific fields
-    // peercoin
     // peercoin: money supply related block index fields
     int64_t nMint{0};
     int64_t nMoneySupply{0};
 
+    static const int BLOCK_PROOF_OF_STAKE_BIT = 0;
+    static const int BLOCK_STAKE_ENTROPY_BIT  = 1;
+    static const int BLOCK_STAKE_MODIFIER_BIT = 2;
+
     // peercoin: proof-of-stake related block index fields
-    unsigned int nFlags{0};  // peercoin: block index flags
+    uint32_t nFlags{0};  // peercoin: block index flags
     enum
     {
-        BLOCK_PROOF_OF_STAKE = (1 << 0), // is proof-of-stake block
-        BLOCK_STAKE_ENTROPY  = (1 << 1), // entropy bit for stake modifier
-        BLOCK_STAKE_MODIFIER = (1 << 2), // regenerated stake modifier
+        BLOCK_PROOF_OF_STAKE = (1 << BLOCK_PROOF_OF_STAKE_BIT), // is proof-of-stake block
+        BLOCK_STAKE_ENTROPY  = (1 << BLOCK_STAKE_ENTROPY_BIT), // entropy bit for stake modifier
+        BLOCK_STAKE_MODIFIER = (1 << BLOCK_STAKE_MODIFIER_BIT), // generated stake modifier
     };
     uint64_t nStakeModifier{0}; // hash modifier for proof-of-stake
-    unsigned int nStakeModifierChecksum{0}; // checksum of index; in-memeory only
+    uint32_t nStakeModifierChecksum{0}; // checksum of index
     COutPoint prevoutStake{};
     unsigned int nStakeTime{0};
     uint256 hashProofOfStake{};
@@ -313,10 +317,15 @@ public:
 
     std::string ToString() const
     {
-        return strprintf("CBlockIndex(pprev=%p, nHeight=%d, merkle=%s, hashBlock=%s)",
-            pprev, nHeight,
-            hashMerkleRoot.ToString(),
-            GetBlockHash().ToString());
+        return strprintf("CBlockIndex(nprev=%08x, nFile=%d, nHeight=%d, nMint=%s, nMoneySupply=%s, nFlags=(%s)(%d)(%s), nStakeModifier=%016llx, nStakeModifierChecksum=%08x, hashProofOfStake=%s, prevoutStake=(%s), nStakeTime=%d merkle=%s, hashBlock=%s)",
+                         pprev, nFile, nHeight,
+                         FormatMoney(nMint), FormatMoney(nMoneySupply),
+                         GeneratedStakeModifier() ? "MOD" : "-", GetStakeEntropyBit(), IsProofOfStake()? "PoS" : "PoW",
+                         nStakeModifier, nStakeModifierChecksum,
+                         hashProofOfStake.ToString(),
+                         prevoutStake.ToString(), nStakeTime,
+                         hashMerkleRoot.ToString().substr(0,10),
+                         GetBlockHash().ToString().substr(0,20));
     }
 
     bool IsProofOfWork() const { return !(nFlags & BLOCK_PROOF_OF_STAKE); }
@@ -366,8 +375,9 @@ public:
     const CBlockIndex* GetAncestor(int height) const;
     bool GeneratedStakeModifier() const;
     uint32_t GetStakeEntropyBit() const;
-    bool SetStakeEntropyBit(uint32_t nEntropyBit);
+    void SetStakeEntropyBit(bool nEntropyBit);
     void SetStakeModifier(uint64_t nModifier, bool fGeneratedStakeModifier);
+    static uint32_t ConstructFlags(bool isProofOfStake, bool stakeEntropyBit, bool generatedStakeModifier);
 };
 
 arith_uint256 GetBlockProof(const CBlockIndex& block);

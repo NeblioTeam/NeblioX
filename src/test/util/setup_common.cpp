@@ -302,7 +302,7 @@ CMutableTransaction TestChain100Setup::CreateValidMempoolTransaction(CTransactio
     // - Populate a CoinsViewCache with the unspent output
     CCoinsView coins_view;
     CCoinsViewCache coins_cache(&coins_view);
-    AddCoins(coins_cache, *input_transaction.get(), input_height);
+    AddCoins(coins_cache, *input_transaction.get(), input_height, 0u);
     // - Use GetCoin to properly populate utxo_to_spend,
     Coin utxo_to_spend;
     assert(coins_cache.GetCoin(outpoint_to_spend, utxo_to_spend));

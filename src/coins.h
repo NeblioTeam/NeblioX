@@ -42,12 +42,14 @@ public:
     // peercoin: transaction timestamp
     uint32_t nTime;
 
+    uint32_t nTxOffsetInBlock;
+
     //! at which height this containing transaction was included in the active block chain
     uint32_t nHeight : 31;
 
     //! construct a Coin from a CTxOut and height/coinbase information.
-    Coin(CTxOut&& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn, uint32_t nTimeIn) : out(std::move(outIn)), fCoinBase(fCoinBaseIn), fCoinStake(fCoinStakeIn), nTime(nTimeIn), nHeight(nHeightIn) {}
-    Coin(const CTxOut& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn, uint32_t nTimeIn) : out(outIn), fCoinBase(fCoinBaseIn), fCoinStake(fCoinStakeIn), nTime(nTimeIn), nHeight(nHeightIn) {}
+    Coin(CTxOut&& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn, uint32_t nTimeIn, uint32_t nTxOffsetIn) : out(std::move(outIn)), fCoinBase(fCoinBaseIn), fCoinStake(fCoinStakeIn), nTime(nTimeIn), nTxOffsetInBlock(nTxOffsetIn), nHeight(nHeightIn) {}
+    Coin(const CTxOut& outIn, int nHeightIn, bool fCoinBaseIn, bool fCoinStakeIn, uint32_t nTimeIn, uint32_t nTxOffsetIn) : out(outIn), fCoinBase(fCoinBaseIn), fCoinStake(fCoinStakeIn), nTime(nTimeIn), nTxOffsetInBlock(nTxOffsetIn), nHeight(nHeightIn) {}
 
     void Clear() {
         out.SetNull();
@@ -77,6 +79,7 @@ public:
         ::Serialize(s, VARINT(nFlag));
         // Neblio transaction timestamp
         ::Serialize(s, VARINT(nTime));
+        ::Serialize(s, VARINT(nTxOffsetInBlock));
     }
 
     template<typename Stream>
@@ -92,6 +95,7 @@ public:
         fCoinStake = nFlag & 1;
         // Neblio transaction timestamp
         ::Unserialize(s, VARINT(nTime));
+        ::Unserialize(s, VARINT(nTxOffsetInBlock));
     }
 
     /** Either this coin never existed (see e.g. coinEmpty in coins.cpp), or it
@@ -356,7 +360,7 @@ private:
 //! an overwrite.
 // TODO: pass in a boolean to limit these possible overwrites to known
 // (pre-BIP34) cases.
-void AddCoins(CCoinsViewCache& cache, const CTransaction& tx, int nHeight, bool check = false);
+void AddCoins(CCoinsViewCache& cache, const CTransaction& tx, int nHeight, uint32_t txOffset, bool check = false);
 
 //! Utility function to find any unspent output with a given txid.
 //! This function can be quite expensive because in the event of a transaction
