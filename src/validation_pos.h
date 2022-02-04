@@ -12,7 +12,7 @@ inline int64_t PastDrift(int64_t nTime) { return nTime - 10 * 60; }   // up to 1
 inline int64_t FutureDrift(int64_t nTime) { return nTime + 10 * 60; } // up to 10 minutes in the future
 
 // These checks can only be done when all previous block have been added.
-bool PeercoinContextualBlockChecks(const CChainState& chain_state, const CBlock& block, BlockValidationState& state, CBlockIndex* pindex, bool fJustCheck);
+bool NeblioContextualBlockChecks(const CChainState& chain_state, const uint256& blockHash, const std::optional<CTransactionRef>& coinstake, uint32_t BlocknBits, BlockValidationState &state, CBlockIndex *pindex, bool fJustCheck);
 
 bool CheckBlockSignature(const CBlock& block);
 

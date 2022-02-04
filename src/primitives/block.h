@@ -115,6 +115,13 @@ public:
 
     bool IsProofOfStake() const;
     bool IsProofOfWork() const;
+    std::optional<CTransactionRef> CoinstakeIfPoS() const
+    {
+        if(IsProofOfStake()) {
+            return vtx[1];
+        }
+        return std::nullopt;
+    }
 
     std::string ToString() const;
 

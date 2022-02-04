@@ -45,16 +45,16 @@ struct EvalPoSOutput {
     uint32_t nStakeModifierChecksum;
 };
 
-Result<EvalPoSOutput, std::string> CheckPoSBlockAndEvalPoSParams(const CChainState& chain_state, const CBlock &block, BlockValidationState &state, const CBlockIndex *pindex) {
+Result<EvalPoSOutput, std::string> CheckPoSBlockAndEvalPoSParams(const CChainState& chain_state, const uint256& blockHash, const std::optional<CTransactionRef>& coinstake, uint32_t BlocknBits, BlockValidationState &state, const CBlockIndex *pindex) {
     uint256 hashProofOfStake = uint256();
     // peercoin: verify hash target and signature of coinstake tx
-    if (block.IsProofOfStake() && !CheckProofOfStake(chain_state, state, pindex->pprev, *block.vtx[1], block.nBits, hashProofOfStake)) {
-        LogPrintf("WARNING: %s: check proof-of-stake failed for block %s\n", __func__, block.GetHash().ToString());
-        return Err(std::string("block.IsProofOfStake() is false or CheckProofOfStake failed for block")); // do not error here as we expect this during initial block download
+    if (!coinstake || !CheckProofOfStake(chain_state, state, pindex->pprev, **coinstake, BlocknBits, hashProofOfStake)) {
+        LogPrintf("WARNING: %s: check proof-of-stake failed for block %s\n", __func__, blockHash.ToString());
+        return Err(std::string("CheckProofOfStake failed for block")); // do not error here as we expect this during initial block download
     }
 
     // peercoin: compute stake entropy bit for stake modifier
-    const bool fEntropyBit = CBlock::GetStakeEntropyBit(block.GetHash());
+    const bool fEntropyBit = CBlock::GetStakeEntropyBit(blockHash);
 
     // peercoin: compute stake modifier
     uint64_t nStakeModifier = 0;
@@ -75,9 +75,9 @@ Result<EvalPoSOutput, std::string> CheckPoSBlockAndEvalPoSParams(const CChainSta
     return Ok(EvalPoSOutput(hashProofOfStake, fGeneratedStakeModifier, nStakeModifier, fEntropyBit, nStakeModifierChecksum));
 }
 
-bool PeercoinContextualBlockChecks(const CChainState& chain_state, const CBlock &block, BlockValidationState &state, CBlockIndex *pindex, bool fJustCheck)
+bool NeblioContextualBlockChecks(const CChainState& chain_state, const uint256& blockHash, const std::optional<CTransactionRef>& coinstake, uint32_t BlocknBits, BlockValidationState &state, CBlockIndex *pindex, bool fJustCheck)
 {
-    const Result<EvalPoSOutput, std::string> PoSResultWrapped = CheckPoSBlockAndEvalPoSParams(chain_state, block, state, pindex);
+    const Result<EvalPoSOutput, std::string> PoSResultWrapped = CheckPoSBlockAndEvalPoSParams(chain_state, blockHash, coinstake, BlocknBits, state, pindex);
     if(PoSResultWrapped.isErr()) {
         return false;
     }
@@ -88,9 +88,9 @@ bool PeercoinContextualBlockChecks(const CChainState& chain_state, const CBlock 
         return true;
 
     // write everything to index
-    if (block.IsProofOfStake())
+    if (coinstake)
     {
-        UpdateBlockIndexWithPoSData(pindex, block.vtx[1], PoSResult.hashProofOfStake);
+        UpdateBlockIndexWithPoSData(pindex, *coinstake, PoSResult.hashProofOfStake);
     }
     UpdateBlockIndexWithModifierData(pindex, PoSResult.fEntropyBit, PoSResult.nStakeModifier, PoSResult.fGeneratedStakeModifier, PoSResult.nStakeModifierChecksum);
     setDirtyBlockIndex.insert(pindex);  // queue a write to disk

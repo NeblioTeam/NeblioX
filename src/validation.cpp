@@ -1737,7 +1737,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     assert(*pindex->phashBlock == block.GetHash());
     int64_t nTimeStart = GetTimeMicros();
 
-    if (pindex->nStakeModifier == 0 && pindex->nStakeModifierChecksum == 0 && !PeercoinContextualBlockChecks(*this, block, state, pindex, fJustCheck))
+    if (pindex->nStakeModifier == 0 && pindex->nStakeModifierChecksum == 0 && !NeblioContextualBlockChecks(*this, block.GetHash(), block.CoinstakeIfPoS(), block.nBits, state, pindex, fJustCheck))
         return error("%s: failed PoS check %s", __func__, state.ToString());
 
     // Check it again in case a previous version let a bad block in
@@ -3620,7 +3620,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     }
 
     // peercoin: check PoS
-    if (fCheckPoS && !PeercoinContextualBlockChecks(*this, block, state, pindex, false)) {
+    if (fCheckPoS && !NeblioContextualBlockChecks(*this, block.GetHash(), block.CoinstakeIfPoS(), block.nBits, state, pindex, false)) {
         pindex->nStatus |= BLOCK_FAILED_VALID;
         setDirtyBlockIndex.insert(pindex);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-pos", "proof of stake is incorrect");
