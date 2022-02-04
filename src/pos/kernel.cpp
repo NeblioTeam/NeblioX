@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2013 The PPCoin developers
+﻿// Copyright (c) 2012-2013 The PPCoin developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -62,53 +62,6 @@ static int64_t GetStakeModifierSelectionInterval(const CChainState &chain_state)
 
     return nSelectionInterval;
 }
-
-//// select a block from the candidate blocks in vSortedByTimestamp, excluding
-//// already selected blocks in vSelectedBlocks, and with timestamp up to
-//// nSelectionIntervalStop.
-//static bool SelectBlockFromCandidates(CChainState &chain_state, BlockValidationState &/*state*/,
-//                                      vector<pair<int64_t, uint256>>& vSortedByTimestamp,
-//                                      map<uint256, const CBlockIndex*>& mapSelectedBlocks,
-//                                      int64_t nSelectionIntervalStop, uint64_t nStakeModifierPrev,
-//                                      const CBlockIndex** pindexSelected)
-//{
-//    static const bool fDebug = false;
-
-//    bool    fSelected = false;
-//    arith_uint256 hashBest{};
-//    *pindexSelected   = (const CBlockIndex*)0;
-//    for (const std::pair<int64_t, uint256>& item: vSortedByTimestamp) {
-//        const CBlockIndex* pindex = chain_state.m_blockman.LookupBlockIndex(item.second);
-//        if (!pindex)
-//            return error("SelectBlockFromCandidates: failed to find block index for candidate block %s",
-//                         item.second.ToString().c_str());
-//        if (fSelected && pindex->GetBlockTime() > nSelectionIntervalStop)
-//            break;
-//        if (mapSelectedBlocks.count(pindex->GetBlockHash()) > 0)
-//            continue;
-//        // compute the selection hash by hashing its proof-hash and the
-//        // previous proof-of-stake modifier
-//        CDataStream ss(SER_GETHASH, 0);
-//        ss << pindex->hashProofOfStake << nStakeModifierPrev;
-//        arith_uint256 hashSelection = UintToArith256(Hash(ss.str()));
-//        // the selection hash is divided by 2**32 so that proof-of-stake block
-//        // is always favored over proof-of-work block. this is to preserve
-//        // the energy efficiency property
-//        if (pindex->IsProofOfStake())
-//            hashSelection >>= 32;
-//        if (fSelected && hashSelection < hashBest) {
-//            hashBest        = hashSelection;
-//            *pindexSelected = (const CBlockIndex*)pindex;
-//        } else if (!fSelected) {
-//            fSelected       = true;
-//            hashBest        = hashSelection;
-//            *pindexSelected = (const CBlockIndex*)pindex;
-//        }
-//    }
-//    if (fDebug)
-//        printf("SelectBlockFromCandidates: selection hash=%s\n", hashBest.ToString().c_str());
-//    return fSelected;
-//}
 
 // select a block from the candidate blocks in vSortedByTimestamp, excluding
 // already selected blocks in vSelectedBlocks, and with timestamp up to
@@ -179,7 +132,7 @@ bool ComputeNextStakeModifier(const CChainState &chain_state, BlockValidationSta
                               const CBlockIndex* pindexCurrent, uint64_t& nStakeModifier,
                               bool& fGeneratedStakeModifier)
 {
-    static const bool fDebug = false;
+    static const bool fDebug = gArgs.IsArgSet("-debug");
     const CBlockIndex* pindexPrev = pindexCurrent->pprev;
     nStakeModifier          = 0;
     fGeneratedStakeModifier = false;
@@ -429,11 +382,6 @@ bool CheckProofOfStake(const CChainState &chain_state, BlockValidationState &sta
         return state.Invalid(BlockValidationResult::DOS_100, "malformed-txn");
     }
 
-
-    // Transaction index is required to get tx position in block
-//    if (!g_txindex)
-//        return error("CheckProofOfStake() : transaction index not available");
-
     // Kernel (input 0) must match the stake hash target per coin age (nBits)
     const CTxIn& txin = tx.vin[0];
 
@@ -445,28 +393,6 @@ bool CheckProofOfStake(const CChainState &chain_state, BlockValidationState &sta
     //            Perhaps VIU is good enough. All this must be checked.
 
     // Get transaction index for the previous transaction
-//    CDiskTxPos postx;
-//    if (!g_txindex->FindTxPosition(txin.prevout.hash, postx))
-//        return error("CheckProofOfStake() : tx index not found");  // tx index not found
-
-
-
-    // Read txPrev and header of its block
-//    CBlockHeader header;
-//    CTransactionRef txPrev;
-//    {
-//        CAutoFile file(OpenBlockFile(postx, true), SER_DISK, CLIENT_VERSION);
-//        try {
-//            file >> header;
-//            fseek(file.Get(), postx.nTxOffset, SEEK_CUR);
-//            file >> txPrev;
-//        } catch (std::exception &e) {
-//            return error("%s() : deserialize or I/O error in CheckProofOfStake()", __PRETTY_FUNCTION__);
-//        }
-//        if (txPrev->GetHash() != txin.prevout.hash)
-//            return error("%s() : txid mismatch in CheckProofOfStake()", __PRETTY_FUNCTION__);
-//    }
-
     Coin coin;
     if (!chain_state.CoinsTip().GetCoin(txin.prevout, coin)) {
         LogPrintf("CheckProofOfStake() : INFO: read txPrev failed for prevout: %s", txin.prevout.ToString());
@@ -478,54 +404,26 @@ bool CheckProofOfStake(const CChainState &chain_state, BlockValidationState &sta
             // initial download
     }
 
-//    auto pindexKernelIt = chain_state.m_blockman.m_block_index.find(header.GetHash());
-//    if(pindexKernelIt == chain_state.m_blockman.m_block_index.cend()) {
-//        LogPrintf("ERROR: %s: invalid-prevout\n", __func__);
-//        return state.Invalid(BlockValidationResult::DOS_100, "invalid-prevout");
-//    }
-//    const CBlockIndex* pindexKernel = pindexKernelIt->second;
-
     const CBlockIndex *pindexKernel = chain_state.m_chain[coin.nHeight];
     if (!pindexKernel) {
         LogPrintf("ERROR: %s: invalid-prevout\n", __func__);
         return state.Invalid(BlockValidationResult::DOS_100, "invalid-prevout");
     }
 
-    const CScript kernelPubKey = coin.out.scriptPubKey;
+    const CScript& kernelPubKey = coin.out.scriptPubKey;
     const CAmount amount = coin.out.nValue;
-//    const int64_t nBlockFromTime = pindexKernel->GetBlockTime();
 
-//    const CTxOut& prevOut = txPrev->vout[tx.vin[0].prevout.n];
-//    const CScript kernelPubKey = prevOut.scriptPubKey;
-//    const CAmount amount = prevOut.nValue;
-
-    const CScript &scriptSig = txin.scriptSig;
-    const CScriptWitness *witness = &txin.scriptWitness;
+    const CScript& scriptSig = txin.scriptSig;
+    const CScriptWitness& witness = txin.scriptWitness;
     ScriptError serror = SCRIPT_ERR_OK;
     // Verify signature
     const TransactionSignatureChecker checker(&tx, 0, amount, PrecomputedTransactionData(tx), MissingDataBehavior::FAIL);
-    if (!VerifyScript(scriptSig, kernelPubKey, witness, 0, checker, &serror)) {
+    if (!VerifyScript(scriptSig, kernelPubKey, &witness, 0, checker, &serror)) {
         LogPrintf("ERROR: %s: verify-script-failed, txn %s, reason %s\n", __func__, tx.GetHash().ToString(), ScriptErrorString(serror));
         return state.Invalid(BlockValidationResult::DOS_100, "verify-cs-script-failed");
     }
 
-
-//    CTransactionRef txPrev;
-//    uint256 pindexKernelBlockHash;
-//    if(pindexKernelBlockHash != pindexKernel->GetBlockHash()) {
-//        LogPrintf("Unexpected error: The coin_state and the txindex return different block hashes for prevout: %s; (in order: %s vs %s)", txin.prevout.ToString(), pindexKernel->GetBlockHash().ToString(), pindexKernelBlockHash.ToString());
-//        return state.Invalid(BlockValidationResult::DOS_1, "prevout-kernel-not-found1");
-//    }
-
-//    if(!g_txindex->FindTx(txin.prevout.hash, pindexKernelBlockHash, txPrev)) {
-//        return state.Invalid(BlockValidationResult::DOS_1, "prevout-kernel-not-found2");
-//    }
-
-//    if(!txPrev) {
-//        return state.Invalid(BlockValidationResult::DOS_1, "prevout-kernel-not-found3");
-//    }
-
-    static const bool fDebug = true;
+    static const bool fDebug = gArgs.IsArgSet("-debug");
 
     if (!CheckStakeKernelHash(chain_state, state, pindexPrev, nBits, *pindexKernel,
                               coin.nTxOffsetInBlock,
