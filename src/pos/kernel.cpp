@@ -451,8 +451,8 @@ bool CheckCoinStakeTimestamp(int64_t nTimeBlock, int64_t nTimeTx)
 uint32_t GetStakeModifierChecksum(const CChainState &chain_state, const CBlockIndex* pindex)
 {
     assert(pindex->pprev || pindex->GetBlockHash() == chain_state.m_params.GetConsensus().hashGenesisBlock);
-    std::optional<uint32_t> prevChecksum = pindex->pprev ? std::make_optional(pindex->pprev->nStakeModifierChecksum) : std::nullopt;
-    uint32_t checksum = GetStakeModifierChecksum(prevChecksum, pindex->IsProofOfStake(), pindex->hashProofOfStake, pindex->nStakeModifier, pindex->nFlags);
+    const std::optional<uint32_t> prevChecksum = pindex->pprev ? std::make_optional(pindex->pprev->nStakeModifierChecksum) : std::nullopt;
+    const uint32_t checksum = GetStakeModifierChecksum(prevChecksum, pindex->IsProofOfStake(), pindex->hashProofOfStake, pindex->nStakeModifier, pindex->nFlags);
     return checksum;
 }
 
