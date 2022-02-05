@@ -48,7 +48,7 @@ struct EvalPoSOutput {
 Result<EvalPoSOutput, std::string> CheckPoSBlockAndEvalPoSParams(const CChainState& chain_state, const uint256& blockHash, const std::optional<CTransactionRef>& coinstake, uint32_t BlocknBits, BlockValidationState &state, const CBlockIndex *pindex) {
     uint256 hashProofOfStake = uint256();
     // peercoin: verify hash target and signature of coinstake tx
-    if (!coinstake || !CheckProofOfStake(chain_state, state, pindex->pprev, **coinstake, BlocknBits, hashProofOfStake)) {
+    if (coinstake && !CheckProofOfStake(chain_state, state, pindex->pprev, **coinstake, BlocknBits, hashProofOfStake)) {
         LogPrintf("WARNING: %s: check proof-of-stake failed for block %s\n", __func__, blockHash.ToString());
         return Err(std::string("CheckProofOfStake failed for block")); // do not error here as we expect this during initial block download
     }
@@ -66,7 +66,7 @@ Result<EvalPoSOutput, std::string> CheckPoSBlockAndEvalPoSParams(const CChainSta
 
     const uint32_t blockFlags = CBlockIndex::ConstructFlags(pindex->IsProofOfStake(), fEntropyBit, fGeneratedStakeModifier);
     const std::optional<uint32_t> prevChecksum = pindex->pprev ? std::make_optional(pindex->pprev->nStakeModifierChecksum) : std::nullopt;
-    const unsigned int nStakeModifierChecksum = GetStakeModifierChecksum(prevChecksum, pindex->IsProofOfStake(), hashProofOfStake, nStakeModifier, blockFlags);
+    const uint32_t nStakeModifierChecksum = GetStakeModifierChecksum(prevChecksum, pindex->IsProofOfStake(), hashProofOfStake, nStakeModifier, blockFlags);
 
     if (!CheckStakeModifierCheckpoints(chain_state.m_params.GetConsensus(), pindex->nHeight, nStakeModifierChecksum)) {
         return Err(strprintf("ConnectBlock() : Rejected by stake modifier checkpoint height=%d, modifier=0x%016llx", pindex->nHeight, nStakeModifier));
