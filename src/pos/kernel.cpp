@@ -470,7 +470,7 @@ uint32_t GetStakeModifierChecksum(const std::optional<uint32_t>& prevModifierChe
 }
 
 // Check stake modifier hard checkpoints
-bool CheckStakeModifierCheckpoints(const Consensus::Params& params, int nHeight, unsigned int nStakeModifierChecksum)
+bool CheckStakeModifierCheckpoints(const Consensus::Params& params, int nHeight, uint32_t nStakeModifierChecksum)
 {
     const Consensus::Params::MapStakeModifierCheckpoints& checkpoints = params.StakeModifierCheckpoints();
 
