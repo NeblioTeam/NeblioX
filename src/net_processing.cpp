@@ -38,6 +38,8 @@
 #include <util/trace.h>
 #include <validation.h>
 
+#include <net_processing_pos.h>
+
 #include <algorithm>
 #include <memory>
 #include <optional>
@@ -290,33 +292,6 @@ struct Peer {
 
 using PeerRef = std::shared_ptr<Peer>;
 
-namespace {
-/**
- * Before storing things in the block index, we store some of the header data in memory
- */
-struct IntermediateBlockIndex
-{
-    arith_uint256 nChainWork{};
-    CBlockHeader header;
-    int nHeight;
-    mutable std::optional<uint256> cachedHash;
-
-    IntermediateBlockIndex(const CBlockHeader& blockHeader, const arith_uint256& prevWork, const int prevHeight)
-    {
-        header = blockHeader;
-        nChainWork = prevWork + GetBlockProofFromBits(blockHeader.nBits);
-        nHeight = prevHeight + 1;
-    }
-
-    uint256 GetBlockHash() const {
-        if(!cachedHash) {
-            cachedHash = header.GetHash();
-        }
-        return *cachedHash;
-    }
-};
-}
-
 class PeerManagerImpl final : public PeerManager
 {
 public:
@@ -556,14 +531,14 @@ private:
      * Returns false, still setting pit, if the block was already in flight from the same peer
      * pit will only be valid as long as the same cs_main lock is being held
      */
-    bool BlockRequested(NodeId nodeid, const IntermediateBlockIndex& block, std::list<QueuedBlock>::iterator** pit = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool BlockRequested(NodeId nodeid, const IntermediateBlockIndexEntry& block, std::list<QueuedBlock>::iterator** pit = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool TipMayBeStale() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
      *  at most count entries.
      */
-    void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<std::shared_ptr<const IntermediateBlockIndex>>& vBlocks, NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<std::shared_ptr<const IntermediateBlockIndexEntry>>& vBlocks, NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> > mapBlocksInFlight GUARDED_BY(cs_main);
 
@@ -694,7 +669,7 @@ namespace {
 namespace {
 
 // The block index may come from one that we already have, or from one that is temporarily in the peer's claimed headers
-using BIVariant = std::variant<const CBlockIndex*, std::shared_ptr<IntermediateBlockIndex>>;
+using BIVariant = std::variant<const CBlockIndex*, std::shared_ptr<IntermediateBlockIndexEntry>>;
 
 arith_uint256 BIChainWork(const BIVariant& bi) {
     return std::visit([](const auto& biInstance) { return biInstance->nChainWork; }, bi);
@@ -715,8 +690,7 @@ uint256 BIBlockHash(const BIVariant& bi) {
  * and we're no longer holding the node's locks.
  */
 struct CNodeState {
-    // TODO(Sam): Optimize this, maybe make it a multi-index? We need access to this by both height and hash
-    std::deque<std::shared_ptr<IntermediateBlockIndex>> claimedToBeKnown;
+    IntermediateBlockIndex claimedToBeKnown;
     //! The best known block we know this peer has announced.
     std::optional<BIVariant> pindexBestKnownBlock;
     //! The hash of the last unknown block this peer has announced.
@@ -892,7 +866,7 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
     mapBlocksInFlight.erase(it);
 }
 
-bool PeerManagerImpl::BlockRequested(NodeId nodeid, const IntermediateBlockIndex& block, std::list<QueuedBlock>::iterator** pit)
+bool PeerManagerImpl::BlockRequested(NodeId nodeid, const IntermediateBlockIndexEntry& block, std::list<QueuedBlock>::iterator** pit)
 {
     const uint256& blockHash = block.GetBlockHash();
 
@@ -1004,11 +978,13 @@ bool PeerManagerImpl::CanDirectFetch()
 static bool PeerHasHeader(const BlockManager& blockManager, CNodeState *state, const CBlockIndex *pindex) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     // if it's part of the headers the peer sent, then he definitely has it
-    if(std::find_if(state->claimedToBeKnown.cbegin(), state->claimedToBeKnown.cend(), [&](const auto& bi){ return pindex->GetBlockHash() == bi->GetBlockHash(); }) != state->claimedToBeKnown.cend())
+    auto& hashIndex = state->claimedToBeKnown.HashIndex();
+    auto& heightIndex = state->claimedToBeKnown.HeightIndex();
+    if(std::find_if(hashIndex.cbegin(), hashIndex.cend(), [&](const auto& bi){ return pindex->GetBlockHash() == bi->GetBlockHash(); }) != hashIndex.cend())
         return true;
     // otherwise it may be in the history of the common ancestor
     if(!state->claimedToBeKnown.empty()) {
-        const uint256 commonBlockIndexHash = state->claimedToBeKnown.front()->header.hashPrevBlock;
+        const uint256 commonBlockIndexHash = (*heightIndex.begin())->header.hashPrevBlock;
         const CBlockIndex* common = blockManager.LookupBlockIndex(commonBlockIndexHash);
         if (common && pindex == common->GetAncestor(pindex->nHeight))
             return true;
@@ -1046,9 +1022,11 @@ void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256 &hash
 
     ProcessBlockAvailability(nodeid);
 
+    auto& hashIndex = state->claimedToBeKnown.HashIndex();
+
     const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
-    const auto& intermediaryIndexIt = std::find_if(state->claimedToBeKnown.cbegin(), state->claimedToBeKnown.cend(), [&](const std::shared_ptr<IntermediateBlockIndex>& bi){ return bi->GetBlockHash() == hash; });
-    const bool intermediaryIndexFound = intermediaryIndexIt != state->claimedToBeKnown.cend();
+    const auto& intermediaryIndexIt = std::find_if(hashIndex.cbegin(), hashIndex.cend(), [&](const std::shared_ptr<IntermediateBlockIndexEntry>& bi){ return bi->GetBlockHash() == hash; });
+    const bool intermediaryIndexFound = intermediaryIndexIt != hashIndex.cend();
     if ((pindex && pindex->nChainWork > 0) || intermediaryIndexFound) {
         // An actually better block was announced.
         if (state->pindexBestKnownBlock == std::nullopt ||
@@ -1074,7 +1052,7 @@ void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256 &hash
     }
 }
 
-void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<std::shared_ptr<const IntermediateBlockIndex>>& vBlocks, NodeId& /*nodeStaller*/)
+void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<std::shared_ptr<const IntermediateBlockIndexEntry>>& vBlocks, NodeId& /*nodeStaller*/)
 {
     if (count == 0)
         return;
@@ -1130,10 +1108,11 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
     // Never fetch further than the best block we know the peer has, or more than BLOCK_DOWNLOAD_WINDOW + 1 beyond the last
     // linked block we have in common with this peer. The +1 is so we can detect stalling, namely if we would be able to
     // download that next block if the window were 1 larger.
+    auto& heightIndex = state->claimedToBeKnown.HeightIndex();
     int nWindowEnd = state->claimedToBeKnown[startIndex]->nHeight + BLOCK_DOWNLOAD_WINDOW;
-    int nMaxHeight = std::min<int>(state->claimedToBeKnown.back()->nHeight, nWindowEnd + 1);
-    for(const std::shared_ptr<IntermediateBlockIndex>& pindex: state->claimedToBeKnown) {
-        assert(pindex && "IntermediateBlockIndex can never be null as an invariant");
+    int nMaxHeight = std::min<int>((*heightIndex.rbegin())->nHeight, nWindowEnd + 1);
+    for(const std::shared_ptr<IntermediateBlockIndexEntry>& pindex: heightIndex) {
+        assert(pindex && "IntermediateBlockIndexEntry can never be null as an invariant");
         if(pindex->nHeight > nMaxHeight) {
             break;
         }
@@ -1378,8 +1357,11 @@ bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) c
         CNodeState* state = State(nodeid);
         if (state == nullptr)
             return false;
+
+        auto& heightIndex = state->claimedToBeKnown.HeightIndex();
+
         stats.nSyncHeight = state->pindexBestKnownBlock ? BIHeight(*state->pindexBestKnownBlock) : -1;
-        stats.nCommonHeight = !state->claimedToBeKnown.empty() ? state->claimedToBeKnown.front()->nHeight : -1;
+        stats.nCommonHeight = !state->claimedToBeKnown.empty() ? (*heightIndex.begin())->nHeight : -1;
         for (const QueuedBlock& queue : state->vBlocksInFlight) {
             if (queue.hash != uint256::ZERO)
                 stats.vHeightInFlight.push_back(queue.nHeight);
@@ -2150,21 +2132,6 @@ void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, const CBlock& block, c
     const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
     int nSendFlags = State(pfrom.GetId())->fWantsCmpctWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS;
     m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCKTXN, resp));
-}
-
-std::deque<std::shared_ptr<IntermediateBlockIndex>> HeadersToIntermediateBlockIndex(std::size_t toSkip, const CBlockIndex& precedingBlockIndex, const std::vector<CBlockHeader>& headers)
-{
-    if(toSkip >= headers.size()) {
-        return {};
-    }
-    assert(!headers.empty());
-    assert(precedingBlockIndex.GetBlockHash() == headers[toSkip].hashPrevBlock);
-    std::deque<std::shared_ptr<IntermediateBlockIndex>> nominalBlockIndex;
-    nominalBlockIndex.push_back(std::make_shared<IntermediateBlockIndex>(headers[0], precedingBlockIndex.nChainWork, precedingBlockIndex.nHeight));
-    for(std::size_t i = toSkip + 1; i < headers.size(); i++) {
-        nominalBlockIndex.push_back(std::make_shared<IntermediateBlockIndex>(headers[i], nominalBlockIndex[i - 1 - toSkip]->nChainWork, nominalBlockIndex[i - 1 - toSkip]->nHeight));
-    }
-    return nominalBlockIndex;
 }
 
 void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& /*peer*/,
@@ -5111,10 +5078,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         //
         std::vector<CInv> vGetData;
         if (!pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-            std::vector<std::shared_ptr<const IntermediateBlockIndex>> vToDownload;
+            std::vector<std::shared_ptr<const IntermediateBlockIndexEntry>> vToDownload;
             NodeId staller = -1;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
-            for (const std::shared_ptr<const IntermediateBlockIndex>& pindex : vToDownload) {
+            for (const std::shared_ptr<const IntermediateBlockIndexEntry>& pindex : vToDownload) {
                 uint32_t nFetchFlags = GetFetchFlags(*pto);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                 BlockRequested(pto->GetId(), *pindex);
@@ -5123,11 +5090,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             }
             // Blocks are now requested, let's remove them from the list the peer claims to have since he's going to send them to us
             for(auto inFlightIt = mapBlocksInFlight.cbegin(); inFlightIt != mapBlocksInFlight.cend(); ++inFlightIt) {
-                // TODO(Sam): Optimize this after making claimedToBeKnown a multiindex container
-                auto itBi = std::find_if(state.claimedToBeKnown.cbegin(), state.claimedToBeKnown.cend(), [&](const auto& bi){ return inFlightIt->first == bi->GetBlockHash(); });
-                if(itBi != state.claimedToBeKnown.cend()) {
-                    state.claimedToBeKnown.erase(itBi);
-                }
+                state.claimedToBeKnown.erase_by_hash(inFlightIt->first);
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {
