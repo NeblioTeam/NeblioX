@@ -1,4 +1,4 @@
-// Copyright (c) 2009-2010 Satoshi Nakamoto
+﻿// Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -2134,7 +2134,26 @@ void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, const CBlock& block, c
     m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCKTXN, resp));
 }
 
-void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& /*peer*/,
+void CleanHeadersAndAskForMore(const CNetMsgMaker& msgMaker,
+                               const ChainstateManager& m_chainman,
+                               const std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >& mapBlocksInFlight,
+                               CConnman& m_connman,
+                               CNode* pto,
+                               CNodeState& state)
+{
+    const std::size_t sizeBefore = state.claimedToBeKnown.size();
+    // Blocks are now requested, let's remove them from the list the peer claims to have since he's going to send them to us
+    for(auto inFlightIt = mapBlocksInFlight.cbegin(); inFlightIt != mapBlocksInFlight.cend(); ++inFlightIt) {
+        state.claimedToBeKnown.erase_by_hash(inFlightIt->first);
+    }
+    const std::size_t sizeAfter = state.claimedToBeKnown.size();
+    if(sizeAfter != sizeBefore && sizeAfter == 0) {
+        // Neblio: if we just drained all the headers we know from this peer, ask for more
+        m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), uint256()));
+    }
+}
+
+void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                                             const std::vector<CBlockHeader>& headers,
                                             bool /*via_compact_block*/)
 {
@@ -2241,7 +2260,6 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& /*peer*/,
         }
         nodestate->nUnconnectingHeaders = 0;
 
-//        assert(pindexLast);
         UpdateBlockAvailability(pfrom.GetId(), headers.back().GetHash());
 
         // From here, pindexBestKnownBlock should be guaranteed to be non-null,
@@ -2252,27 +2270,51 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& /*peer*/,
             nodestate->m_last_block_announcement = GetTime();
         }
 
+        // Ask for more headers ONLY if claimedToBeKnown is empty
+        if (nCount == MAX_HEADERS_RESULTS && nodestate->claimedToBeKnown.empty()) {
+            // Headers message had its maximum size; the peer may have more headers.
+            // TODO: optimize: if pindexLast is an ancestor of m_chainman.ActiveChain().Tip or pindexBestHeader, continue
+            // from there instead.
+            LogPrint(BCLog::NET, "more getheaders (%d) to end to peer=%d (startheight:%d)\n",
+                                 pindexBestHeader->nHeight, pfrom.GetId(), peer.m_starting_height);
+            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), uint256()));
+        }
 
+        if (nCount == MAX_HEADERS_RESULTS && !nodestate->claimedToBeKnown.empty()) {
+            // they have blocks we don't have... let's get 'em!
 
+            std::vector<CInv> vGetData;
+            // Download as much as possible, from earliest to latest.
+            auto& heightIndex = nodestate->claimedToBeKnown.HeightIndex();
+            const std::shared_ptr<IntermediateBlockIndexEntry> pindexLast = (*heightIndex.rbegin());
+            for (const std::shared_ptr<IntermediateBlockIndexEntry>& pindex : heightIndex) {
+                if (nodestate->nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+                    // Can't download any more from this peer
+                    break;
+                }
+                const uint32_t nFetchFlags = GetFetchFlags(pfrom);
+                vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
+                BlockRequested(pfrom.GetId(), *pindex);
+                LogPrint(BCLog::NET, "Requesting block %s from  peer=%d\n",
+                         pindex->GetBlockHash().ToString(), pfrom.GetId());
+            }
+            if (vGetData.size() > 1) {
+                LogPrint(BCLog::NET, "Downloading blocks toward %s (%d) via headers direct fetch\n",
+                         pindexLast->GetBlockHash().ToString(), pindexLast->nHeight);
+            }
+            if (vGetData.size() > 0) {
+                if (!m_ignore_incoming_txs &&
+                    nodestate->fSupportsDesiredCmpctVersion &&
+                    vGetData.size() == 1 &&
+                    mapBlocksInFlight.size() == 1) {
+                    // In any case, we want to download using a compact block, not a regular one
+                    vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
+                }
+                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
+            }
+        }
 
-
-
-
-        // TODO(Sam): Ask for more headers ONLY if claimedToBeKnown is empty
-//        if (nCount == MAX_HEADERS_RESULTS) {
-//            // Headers message had its maximum size; the peer may have more headers.
-//            // TODO: optimize: if pindexLast is an ancestor of m_chainman.ActiveChain().Tip or pindexBestHeader, continue
-//            // from there instead.
-//            LogPrint(BCLog::NET, "more getheaders (%d) to end to peer=%d (startheight:%d)\n",
-//                                 pindexLast->nHeight, pfrom.GetId(), peer.m_starting_height);
-//            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexLast), uint256()));
-//        }
-
-
-
-
-
-
+        CleanHeadersAndAskForMore(msgMaker, m_chainman, mapBlocksInFlight, m_connman, &pfrom, *nodestate);
 
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
@@ -5088,10 +5130,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 LogPrint(BCLog::NET, "Requesting block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
                     pindex->nHeight, pto->GetId());
             }
-            // Blocks are now requested, let's remove them from the list the peer claims to have since he's going to send them to us
-            for(auto inFlightIt = mapBlocksInFlight.cbegin(); inFlightIt != mapBlocksInFlight.cend(); ++inFlightIt) {
-                state.claimedToBeKnown.erase_by_hash(inFlightIt->first);
-            }
+            CleanHeadersAndAskForMore(msgMaker, m_chainman, mapBlocksInFlight, m_connman, pto, state);
+
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {
                     State(staller)->m_stalling_since = current_time;
