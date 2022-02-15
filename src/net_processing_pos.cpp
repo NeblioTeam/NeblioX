@@ -8,7 +8,10 @@ IntermediateBlockIndex HeadersToIntermediateBlockIndex(std::size_t toSkip, const
     assert(!headers.empty());
     assert(precedingBlockIndex.GetBlockHash() == headers[toSkip].hashPrevBlock);
     IntermediateBlockIndex nominalBlockIndex;
-    std::shared_ptr<IntermediateBlockIndexEntry> prevEntry = std::make_shared<IntermediateBlockIndexEntry>(headers[0], precedingBlockIndex.nChainWork, precedingBlockIndex.nHeight);
+    std::shared_ptr<IntermediateBlockIndexEntry> prevEntry =
+        std::make_shared<IntermediateBlockIndexEntry>(headers[toSkip],
+                                                      precedingBlockIndex.nChainWork,
+                                                      precedingBlockIndex.nHeight);
     nominalBlockIndex.InsertEntry(prevEntry);
     for(std::size_t i = toSkip + 1; i < headers.size(); i++) {
         prevEntry = std::make_shared<IntermediateBlockIndexEntry>(headers[i], prevEntry->nChainWork, prevEntry->nHeight);

@@ -2136,15 +2136,17 @@ void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, const CBlock& block, c
 
 void CleanHeadersAndAskForMore(const CNetMsgMaker& msgMaker,
                                const ChainstateManager& m_chainman,
-                               const std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >& mapBlocksInFlight,
+                               const std::vector<CInv>& invAskedFor,
                                CConnman& m_connman,
                                CNode* pto,
                                CNodeState& state)
 {
     const std::size_t sizeBefore = state.claimedToBeKnown.size();
     // Blocks are now requested, let's remove them from the list the peer claims to have since he's going to send them to us
-    for(auto inFlightIt = mapBlocksInFlight.cbegin(); inFlightIt != mapBlocksInFlight.cend(); ++inFlightIt) {
-        state.claimedToBeKnown.erase_by_hash(inFlightIt->first);
+    for(const auto& inv: invAskedFor) {
+        if(inv.IsMsgBlk()) {
+            state.claimedToBeKnown.erase_by_hash(inv.hash);
+        }
     }
     const std::size_t sizeAfter = state.claimedToBeKnown.size();
     if(sizeAfter != sizeBefore && sizeAfter == 0) {
@@ -2170,6 +2172,9 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
     {
         LOCK(cs_main);
         CNodeState *nodestate = State(pfrom.GetId());
+        if(!nodestate) {
+            return;
+        }
 
         // If this looks like it could be a block announcement (nCount <
         // MAX_BLOCKS_TO_ANNOUNCE), use special logic for handling headers that
@@ -2217,6 +2222,9 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
     {
         LOCK(cs_main);
         CNodeState *nodestate = State(pfrom.GetId());
+        if(!nodestate) {
+            return;
+        }
         // Only connecting headers are allowed
         const CBlockIndex* prevLastKnownBlockIndex = m_chainman.m_blockman.LookupBlockIndex(headers[0].hashPrevBlock);
         if(!prevLastKnownBlockIndex) {
@@ -2230,9 +2238,15 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // skip headers that we already have, so we start the vector at the common ancestor
         std::size_t skip = 0;
         for(std::size_t i = 1; i < headers.size(); i++) {
-            const CBlockIndex* bi = m_chainman.m_blockman.LookupBlockIndex(headers[i].hashPrevBlock);
+            CBlockIndex* bi = m_chainman.m_blockman.LookupBlockIndex(headers[i].hashPrevBlock);
             if(!bi) {
                 break;
+            }
+            // In case the node shuts down with an invalid block index state, here we attempt to fix it
+            // it's done such that too many invalid block attempts will cause peers to get banned, to avoid abuse
+            if(bi->nStatus & BLOCK_FAILED_MASK) {
+                m_chainman.ActiveChainstate().ResetBlockFailureFlags(bi);
+                Misbehaving(pfrom.GetId(), 1, strprintf("Offering invalid block; flags were reset: %s", bi->GetBlockHash().ToString()));
             }
             prevLastKnownBlockIndex = bi;
             skip = i;
@@ -2255,6 +2269,9 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
     {
         LOCK(cs_main);
         CNodeState *nodestate = State(pfrom.GetId());
+        if(!nodestate) {
+            return;
+        }
         if (nodestate->nUnconnectingHeaders > 0) {
             LogPrint(BCLog::NET, "peer=%d: resetting nUnconnectingHeaders (%d -> 0)\n", pfrom.GetId(), nodestate->nUnconnectingHeaders);
         }
@@ -2280,7 +2297,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), uint256()));
         }
 
-        if (nCount == MAX_HEADERS_RESULTS && !nodestate->claimedToBeKnown.empty()) {
+        if (!nodestate->claimedToBeKnown.empty()) {
             // they have blocks we don't have... let's get 'em!
 
             std::vector<CInv> vGetData;
@@ -2311,10 +2328,9 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                 }
                 m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
+                CleanHeadersAndAskForMore(msgMaker, m_chainman, vGetData, m_connman, &pfrom, *nodestate);
             }
         }
-
-        CleanHeadersAndAskForMore(msgMaker, m_chainman, mapBlocksInFlight, m_connman, &pfrom, *nodestate);
 
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
@@ -5130,7 +5146,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 LogPrint(BCLog::NET, "Requesting block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
                     pindex->nHeight, pto->GetId());
             }
-            CleanHeadersAndAskForMore(msgMaker, m_chainman, mapBlocksInFlight, m_connman, pto, state);
+            CleanHeadersAndAskForMore(msgMaker, m_chainman, vGetData, m_connman, pto, state);
 
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {
