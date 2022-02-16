@@ -11,6 +11,7 @@
 #include <pubkey.h>
 #include <script/script.h>
 #include <uint256.h>
+#include <logging.h>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -1768,8 +1769,10 @@ bool GenericTransactionSignatureChecker<T>::CheckLockTime(const CScriptNum& nLoc
 template <class T>
 bool GenericTransactionSignatureChecker<T>::CheckColdStake(const CScript& script) const
 {
-    if(!txTo)
+    if(!txTo) {
+        LogPrintf("CRITICAL: While verifying cold-stake, the txTo pointer is null");
         return false;
+    }
 
     // tx is a coinstake tx
     if (!txTo->IsCoinStake())

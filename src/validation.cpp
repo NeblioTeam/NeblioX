@@ -3573,7 +3573,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     BOOST_SCOPE_EXIT_ALL(&) {
         if(state.IsInvalid()) {
             setDirtyBlockIndex.erase(pindex);
-            LogPrintf("Acceptance of block (%s) or block index failed. Deleting block index.", block.GetHash().ToString());
+            LogPrintf("Acceptance of block (%s) or block index failed. Deleting block index\n", block.GetHash().ToString());
         }
     };
 

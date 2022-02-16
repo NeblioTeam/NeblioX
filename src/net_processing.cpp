@@ -2213,7 +2213,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         const CBlockIndex* prevLastKnownBlockIndex = m_chainman.m_blockman.LookupBlockIndex(headers[0].hashPrevBlock);
         if(!prevLastKnownBlockIndex) {
             nodestate->nUnconnectingHeaders++;
-            LogPrintf("Error: Previous block not found from peer %s", std::to_string(pfrom.GetId()));
+            LogPrintf("Error: Previous block not found from peer %s\n", std::to_string(pfrom.GetId()));
             if (nodestate->nUnconnectingHeaders % MAX_UNCONNECTING_HEADERS == 0) {
                 Misbehaving(pfrom.GetId(), 20, strprintf("%d non-connecting headers", nodestate->nUnconnectingHeaders));
             }
