@@ -531,14 +531,14 @@ private:
      * Returns false, still setting pit, if the block was already in flight from the same peer
      * pit will only be valid as long as the same cs_main lock is being held
      */
-    bool BlockRequested(NodeId nodeid, const IntermediateBlockIndexEntry& block, std::list<QueuedBlock>::iterator** pit = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool BlockRequested(NodeId nodeid, const BIVariant& block, std::list<QueuedBlock>::iterator** pit = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool TipMayBeStale() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
      *  at most count entries.
      */
-    void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<std::shared_ptr<const IntermediateBlockIndexEntry>>& vBlocks, NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<std::shared_ptr<IntermediateBlockIndexEntry>>& vBlocks, NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> > mapBlocksInFlight GUARDED_BY(cs_main);
 
@@ -667,22 +667,6 @@ namespace {
 } // namespace
 
 namespace {
-
-// The block index may come from one that we already have, or from one that is temporarily in the peer's claimed headers
-using BIVariant = std::variant<const CBlockIndex*, std::shared_ptr<IntermediateBlockIndexEntry>>;
-
-arith_uint256 BIChainWork(const BIVariant& bi) {
-    return std::visit([](const auto& biInstance) { return biInstance->nChainWork; }, bi);
-}
-
-int BIHeight(const BIVariant& bi) {
-    return std::visit([](const auto& biInstance) { return biInstance->nHeight; }, bi);
-}
-
-uint256 BIBlockHash(const BIVariant& bi) {
-    return std::visit([](const auto& biInstance) { return biInstance->GetBlockHash(); }, bi);
-}
-
 /**
  * Maintain validation-specific state about nodes, protected by cs_main, instead
  * by CNode's own locks. This simplifies asynchronous operation, where
@@ -866,9 +850,9 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
     mapBlocksInFlight.erase(it);
 }
 
-bool PeerManagerImpl::BlockRequested(NodeId nodeid, const IntermediateBlockIndexEntry& block, std::list<QueuedBlock>::iterator** pit)
+bool PeerManagerImpl::BlockRequested(NodeId nodeid, const BIVariant& block, std::list<QueuedBlock>::iterator** pit)
 {
-    const uint256& blockHash = block.GetBlockHash();
+    const uint256& blockHash = BIBlockHash(block);
 
     CNodeState *state = State(nodeid);
     assert(state != nullptr);
@@ -886,7 +870,7 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const IntermediateBlockIndex
     RemoveBlockRequest(blockHash);
 
     std::list<QueuedBlock>::iterator it = state->vBlocksInFlight.insert(state->vBlocksInFlight.end(),
-            {blockHash, block.nHeight, std::unique_ptr<PartiallyDownloadedBlock>(pit ? new PartiallyDownloadedBlock(&m_mempool) : nullptr)});
+            {blockHash, BIHeight(block), std::unique_ptr<PartiallyDownloadedBlock>(pit ? new PartiallyDownloadedBlock(&m_mempool) : nullptr)});
     state->nBlocksInFlight++;
     if (state->nBlocksInFlight == 1) {
         // We're starting a block download (batch) from this peer.
@@ -1052,7 +1036,7 @@ void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256 &hash
     }
 }
 
-void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<std::shared_ptr<const IntermediateBlockIndexEntry>>& vBlocks, NodeId& /*nodeStaller*/)
+void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<std::shared_ptr<IntermediateBlockIndexEntry>>& vBlocks, NodeId& /*nodeStaller*/)
 {
     if (count == 0)
         return;
@@ -2248,6 +2232,10 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 m_chainman.ActiveChainstate().ResetBlockFailureFlags(bi);
                 Misbehaving(pfrom.GetId(), 1, strprintf("Offering invalid block; flags were reset: %s", bi->GetBlockHash().ToString()));
             }
+            // if the block wasn't "accepted" before, get it again
+            if(bi->IsValid(BLOCK_VALID_TRANSACTIONS)) {
+                break;
+            }
             prevLastKnownBlockIndex = bi;
             skip = i;
         }
@@ -2311,7 +2299,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 }
                 const uint32_t nFetchFlags = GetFetchFlags(pfrom);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-                BlockRequested(pfrom.GetId(), *pindex);
+                BlockRequested(pfrom.GetId(), pindex);
                 LogPrint(BCLog::NET, "Requesting block %s from  peer=%d\n",
                          pindex->GetBlockHash().ToString(), pfrom.GetId());
             }
@@ -3718,16 +3706,16 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
                  (fAlreadyInFlight && blockInFlightIt->second.first == pfrom.GetId())) {
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
-                // TODO(Sam): This is commented because BlockRequested signature was changed; it must be fixed
-//                if (!BlockRequested(pfrom.GetId(), *pindex, &queuedBlockIt)) {
-//                    if (!(*queuedBlockIt)->partialBlock)
-//                        (*queuedBlockIt)->partialBlock.reset(new PartiallyDownloadedBlock(&m_mempool));
-//                    else {
-//                        // The block was already in flight using compact blocks from the same peer
-//                        LogPrint(BCLog::NET, "Peer sent us compact block we were already syncing!\n");
-//                        return;
-//                    }
-//                }
+                // TODO(Sam): Double check that partial blocks work; keep in mind that block header processing happens above; we should store the block index of the partial block in memory in a special container (not with claimedToBeKnown) until the block is complete to avoid writing bogus headers
+                if (!BlockRequested(pfrom.GetId(), pindex, &queuedBlockIt)) {
+                    if (!(*queuedBlockIt)->partialBlock)
+                        (*queuedBlockIt)->partialBlock.reset(new PartiallyDownloadedBlock(&m_mempool));
+                    else {
+                        // The block was already in flight using compact blocks from the same peer
+                        LogPrint(BCLog::NET, "Peer sent us compact block we were already syncing!\n");
+                        return;
+                    }
+                }
 
                 PartiallyDownloadedBlock& partialBlock = *(*queuedBlockIt)->partialBlock;
                 ReadStatus status = partialBlock.InitData(cmpctblock, vExtraTxnForCompact);
@@ -5136,13 +5124,13 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         //
         std::vector<CInv> vGetData;
         if (!pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-            std::vector<std::shared_ptr<const IntermediateBlockIndexEntry>> vToDownload;
+            std::vector<std::shared_ptr<IntermediateBlockIndexEntry>> vToDownload;
             NodeId staller = -1;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
-            for (const std::shared_ptr<const IntermediateBlockIndexEntry>& pindex : vToDownload) {
+            for (const std::shared_ptr<IntermediateBlockIndexEntry>& pindex : vToDownload) {
                 uint32_t nFetchFlags = GetFetchFlags(*pto);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-                BlockRequested(pto->GetId(), *pindex);
+                BlockRequested(pto->GetId(), pindex);
                 LogPrint(BCLog::NET, "Requesting block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
                     pindex->nHeight, pto->GetId());
             }

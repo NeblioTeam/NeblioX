@@ -19,3 +19,15 @@ IntermediateBlockIndex HeadersToIntermediateBlockIndex(std::size_t toSkip, const
     }
     return nominalBlockIndex;
 }
+
+arith_uint256 BIChainWork(const BIVariant &bi) {
+    return std::visit([](const auto& biInstance) { return biInstance->nChainWork; }, bi);
+}
+
+int BIHeight(const BIVariant &bi) {
+    return std::visit([](const auto& biInstance) { return biInstance->nHeight; }, bi);
+}
+
+uint256 BIBlockHash(const BIVariant &bi) {
+    return std::visit([](const auto& biInstance) { return biInstance->GetBlockHash(); }, bi);
+}

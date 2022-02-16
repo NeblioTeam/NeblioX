@@ -3569,14 +3569,21 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     bool accepted_header = m_blockman.AcceptBlockHeader(block, state, m_params, &pindex);
     CheckBlockIndex();
 
+    // if the block is invalid, don't add the block index to disk; block index is useless without valid blocks in PoS
+    BOOST_SCOPE_EXIT_ALL(&) {
+        if(state.IsInvalid()) {
+            setDirtyBlockIndex.erase(pindex);
+            LogPrintf("Acceptance of block (%s) or block index failed. Deleting block index.", block.GetHash().ToString());
+        }
+    };
+
     if (!accepted_header)
         return false;
 
-    // TODO(Sam)
     // peercoin: we should only accept blocks that can be connected to a prev block with validated PoS
-//    if (fCheckPoS && pindex->pprev && !pindex->pprev->IsValid(BLOCK_VALID_TRANSACTIONS)) {
-//        return error("%s: this block does not connect to any valid known block", __func__);
-//    }
+    if (fCheckPoS && pindex->pprev && !pindex->pprev->IsValid(BLOCK_VALID_TRANSACTIONS)) {
+        return error("%s: this block does not connect to any valid known block", __func__);
+    }
 
     // Try to process all requested blocks that we don't have, but only
     // process an unrequested block if it's new and has enough work to
