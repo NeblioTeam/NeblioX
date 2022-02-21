@@ -158,8 +158,6 @@ bool GetCoinAge(const CChainState& chain_state, const CTransaction& tx, const CC
 {
     AssertLockHeld(cs_main);
 
-    static const bool fDebug = false;
-
     arith_uint256 bnCentSecond = 0; // coin age in the unit of cent-seconds
     int64_t nSMA               = stakeMinAge;
     nCoinAge                   = 0;
@@ -207,8 +205,7 @@ bool GetCoinAge(const CChainState& chain_state, const CTransaction& tx, const CC
 
             bnCentSecond += arith_uint256(nValueIn) * nEffectiveAge / CENT;
 
-            if (fDebug)
-                LogPrintf("coin age nValueIn=%-12lld nTimeDiff=%d bnCentSecond=%s\n", nValueIn, nEffectiveAge, bnCentSecond.ToString());
+            LogPrint(BCLog::VALIDATION, "coin age nValueIn=%-12lld nTimeDiff=%d bnCentSecond=%s\n", nValueIn, nEffectiveAge, bnCentSecond.ToString());
         }
 //        else {
 //            return error("%s() : tx missing in tx index in GetCoinAge()", __PRETTY_FUNCTION__);
@@ -217,8 +214,7 @@ bool GetCoinAge(const CChainState& chain_state, const CTransaction& tx, const CC
 
 
     arith_uint256 bnCoinDay = bnCentSecond * CENT / COIN / (24 * 60 * 60);
-    if (fDebug)
-        LogPrintf("coin age bnCoinDay=%s\n", bnCoinDay.ToString());
+    LogPrint(BCLog::VALIDATION, "coin age bnCoinDay=%s\n", bnCoinDay.ToString());
     nCoinAge = bnCoinDay.GetLow64();
     return true;
 }

@@ -110,8 +110,7 @@ static bool SelectBlockFromCandidates(
             *pindexSelected = (const CBlockIndex*) pindex;
         }
     }
-    if (gArgs.GetBoolArg("-debug", false) && gArgs.GetBoolArg("-printstakemodifier", false))
-        LogPrintf("SelectBlockFromCandidates: selection hash=%s\n", hashBest.ToString());
+    LogPrint(BCLog::VALIDATION, "SelectBlockFromCandidates: selection hash=%s\n", hashBest.ToString());
     return fSelected;
 }
 
@@ -132,7 +131,6 @@ bool ComputeNextStakeModifier(const CChainState &chain_state, BlockValidationSta
                               const CBlockIndex* pindexCurrent, uint64_t& nStakeModifier,
                               bool& fGeneratedStakeModifier)
 {
-    static const bool fDebug = gArgs.IsArgSet("-debug");
     const CBlockIndex* pindexPrev = pindexCurrent->pprev;
     nStakeModifier          = 0;
     fGeneratedStakeModifier = false;
@@ -148,10 +146,8 @@ bool ComputeNextStakeModifier(const CChainState &chain_state, BlockValidationSta
     int64_t nModifierTime = 0;
     if (!GetLastStakeModifier(pindexPrev, nStakeModifier, nModifierTime))
         return error("ComputeNextStakeModifier: unable to get last modifier");
-    if (fDebug) {
-        printf("ComputeNextStakeModifier: prev modifier=0x%016" PRIx64 " time=%s\n", nStakeModifier,
-               FormatISO8601DateTime(nModifierTime).c_str());
-    }
+    LogPrint(BCLog::VALIDATION, "ComputeNextStakeModifier: prev modifier=0x%016" PRIx64 " time=%s\n", nStakeModifier,
+             FormatISO8601DateTime(nModifierTime).c_str());
 
     const auto& cons = chain_state.m_params.GetConsensus();
 
@@ -194,15 +190,13 @@ bool ComputeNextStakeModifier(const CChainState &chain_state, BlockValidationSta
         nStakeModifierNew |= (((uint64_t)pindex->GetStakeEntropyBit()) << nRound);
         // add the selected block from candidates to selected list
         mapSelectedBlocks.insert(make_pair(pindex->GetBlockHash(), pindex));
-        if (fDebug) {
-            printf("ComputeNextStakeModifier: selected round %d stop=%s height=%d bit=%d\n", nRound,
+        LogPrint(BCLog::VALIDATION, "ComputeNextStakeModifier: selected round %d stop=%s height=%d bit=%d\n", nRound,
                    FormatISO8601DateTime(nSelectionIntervalStop).c_str(), pindex->nHeight,
                    pindex->GetStakeEntropyBit());
-        }
     }
 
     // Print selection map for visualization of the selected blocks
-    if (fDebug) {
+    if (LogAcceptCategory(BCLog::VALIDATION)) {
         string strSelectionMap = "";
         // '-' indicates proof-of-work blocks not selected
         strSelectionMap.insert(0, pindexPrev->nHeight - nHeightFirstCandidate + 1, '-');
@@ -219,12 +213,10 @@ bool ComputeNextStakeModifier(const CChainState &chain_state, BlockValidationSta
             strSelectionMap.replace(item.second->nHeight - nHeightFirstCandidate, 1,
                                     item.second->IsProofOfStake() ? "S" : "W");
         }
-        printf("ComputeNextStakeModifier: selection height [%d, %d] map %s\n", nHeightFirstCandidate,
+        LogPrint(BCLog::VALIDATION, "ComputeNextStakeModifier: selection height [%d, %d] map %s\n", nHeightFirstCandidate,
                pindexPrev->nHeight, strSelectionMap.c_str());
-    }
-    if (fDebug) {
-        printf("ComputeNextStakeModifier: new modifier=0x%016" PRIx64 " time=%s\n", nStakeModifierNew,
-               FormatISO8601DateTime(pindexPrev->GetBlockTime()).c_str());
+        LogPrint(BCLog::VALIDATION, "ComputeNextStakeModifier: new modifier=0x%016" PRIx64 " time=%s\n", nStakeModifierNew,
+                 FormatISO8601DateTime(pindexPrev->GetBlockTime()).c_str());
     }
 
     nStakeModifier          = nStakeModifierNew;
@@ -237,8 +229,7 @@ bool ComputeNextStakeModifier(const CChainState &chain_state, BlockValidationSta
 static bool GetKernelStakeModifier(const CChainState &chain_state, BlockValidationState &/*state*/,
                                    const CBlockIndex* pindexPrev,
                                    const CBlockIndex& kernelBlockIndex, uint64_t& nStakeModifier,
-                                   int& nStakeModifierHeight, int64_t& nStakeModifierTime,
-                                   bool fPrintProofOfStake)
+                                   int& nStakeModifierHeight, int64_t& nStakeModifierTime)
 {
     AssertLockHeld(cs_main);
     int currentHeight = pindexPrev->nHeight + 1;
@@ -253,7 +244,7 @@ static bool GetKernelStakeModifier(const CChainState &chain_state, BlockValidati
     // loop to find the stake modifier later by a selection interval
     while (nStakeModifierTime < pindexFrom->GetBlockTime() + nStakeModifierSelectionInterval) {
         if (!chain_state.m_chain.Next(pindex)) { // reached best block; may happen if node is behind on block chain
-            if (fPrintProofOfStake ||
+            if (LogAcceptCategory(BCLog::VALIDATION) ||
                 (pindex->GetBlockTime() + nSMA - nStakeModifierSelectionInterval > GetAdjustedTime()))
                 return error(
                     "GetKernelStakeModifier() : reached best block %s at height %d from block %s",
@@ -297,7 +288,7 @@ static bool GetKernelStakeModifier(const CChainState &chain_state, BlockValidati
 bool CheckStakeKernelHash(const CChainState &chain_state, BlockValidationState &state, const CBlockIndex *pindexPrev, unsigned int nBits,
                           const CBlockIndex& blockIndexKernel, unsigned int nTxPrevOffset,
                           const uint32_t txKernelnTime, const CAmount txKernelnValue, const COutPoint& prevout, unsigned int nTimeTx,
-                          uint256& hashProofOfStake, bool fPrintProofOfStake)
+                          uint256& hashProofOfStake)
 {
     if (nTimeTx < txKernelnTime) // Transaction timestamp violation
         return error("CheckStakeKernelHash() : nTime violation");
@@ -324,18 +315,17 @@ bool CheckStakeKernelHash(const CChainState &chain_state, BlockValidationState &
     int         nStakeModifierHeight = 0;
     int64_t     nStakeModifierTime   = 0;
 
-    if (!GetKernelStakeModifier(chain_state, state, pindexPrev, blockIndexKernel, nStakeModifier, nStakeModifierHeight, nStakeModifierTime,
-                                fPrintProofOfStake))
+    if (!GetKernelStakeModifier(chain_state, state, pindexPrev, blockIndexKernel, nStakeModifier, nStakeModifierHeight, nStakeModifierTime))
         return false;
     ss << nStakeModifier << nKernelTimeBlockFrom << nTxPrevOffset << txKernelnTime << prevout.n << nTimeTx;
     hashProofOfStake = Hash(ss.str());
-    if (fPrintProofOfStake) {
-        LogPrintf("CheckStakeKernelHash() : using modifier 0x%016" PRIx64
+    if (LogAcceptCategory(BCLog::VALIDATION)) {
+        LogPrint(BCLog::VALIDATION, "CheckStakeKernelHash() : using modifier 0x%016" PRIx64
                " at height=%d timestamp=%s for block from kernelHeight=%d and Height=%d timestamp=%s\n",
                nStakeModifier, nStakeModifierHeight, std::to_string(nStakeModifierTime).c_str(),
                blockIndexKernel.nHeight, currentHeight,
                std::to_string(blockIndexKernel.GetBlockTime()).c_str());
-        LogPrintf(
+        LogPrint(BCLog::VALIDATION,
             "CheckStakeKernelHash() : check modifier=%s"
             " nKernelTimeBlockFrom=%u nTxPrevOffset=%u nTimeTxPrev=%u prevout.n=%u nTimeTx=%u | Resulted in hashProof=%s\n",
             std::to_string(nStakeModifier), nKernelTimeBlockFrom, nTxPrevOffset, txKernelnTime, prevout.n, nTimeTx,
@@ -355,7 +345,7 @@ bool CheckStakeKernelHash(const CChainState &chain_state, BlockValidationState &
     const bool correctTarget = UintToArith256(hashProofOfStake) <= targetProofOfStake;
     const bool wouldOverflow = bnTargetPerCoinDay == 0 ? false : bnCoinDayWeight > MAX_UINT256 / bnTargetPerCoinDay;
     if (!correctTarget && !wouldOverflow) {
-        printf("CheckStakeKernelHash() : using modifier 0x%016" PRIx64
+        LogPrint(BCLog::VALIDATION, "CheckStakeKernelHash() : using modifier 0x%016" PRIx64
                " at height=%d timestamp=%s for block from height=%d timestamp=%s txPrevOffset=%s txKernel_nTime=%s prevout_n=%s nTimeTx=%s\n",
                nStakeModifier, nStakeModifierHeight, std::to_string(nStakeModifierTime).c_str(),
                blockIndexKernel.nHeight,
@@ -378,7 +368,7 @@ bool CheckProofOfStake(const CChainState &chain_state, BlockValidationState &sta
     AssertLockHeld(cs_main);
     if (!tx.IsCoinStake()
         || tx.vin.size() < 1) {
-        LogPrintf("ERROR: %s: malformed-txn %s\n", __func__, tx.GetHash().ToString());
+        LogPrint(BCLog::VALIDATION, "ERROR: %s: malformed-txn %s\n", __func__, tx.GetHash().ToString());
         return state.Invalid(BlockValidationResult::DOS_100, "malformed-txn");
     }
 
@@ -395,7 +385,7 @@ bool CheckProofOfStake(const CChainState &chain_state, BlockValidationState &sta
     // Get transaction index for the previous transaction
     Coin coin;
     if (!chain_state.CoinsTip().GetCoin(txin.prevout, coin)) {
-        LogPrintf("CheckProofOfStake() : INFO: read txPrev failed for prevout: %s", txin.prevout.ToString());
+        LogPrint(BCLog::VALIDATION, "CheckProofOfStake() : INFO: read txPrev failed for prevout: %s", txin.prevout.ToString());
         return state.Invalid(BlockValidationResult::DOS_1, "prevout-not-found");
             // previous
             // transaction not
@@ -406,7 +396,7 @@ bool CheckProofOfStake(const CChainState &chain_state, BlockValidationState &sta
 
     const CBlockIndex *pindexKernel = chain_state.m_chain[coin.nHeight];
     if (!pindexKernel) {
-        LogPrintf("ERROR: %s: invalid-prevout\n", __func__);
+        LogPrint(BCLog::VALIDATION, "ERROR: %s: invalid-prevout\n", __func__);
         return state.Invalid(BlockValidationResult::DOS_100, "invalid-prevout");
     }
 
@@ -419,19 +409,18 @@ bool CheckProofOfStake(const CChainState &chain_state, BlockValidationState &sta
     // Verify signature
     const TransactionSignatureChecker checker(&tx, 0, amount, PrecomputedTransactionData(tx), MissingDataBehavior::FAIL);
     if (!VerifyScript(scriptSig, kernelPubKey, &witness, 0, checker, &serror)) {
-        LogPrintf("ERROR: %s: verify-script-failed, txn %s, reason %s\n", __func__, tx.GetHash().ToString(), ScriptErrorString(serror));
+        LogPrint(BCLog::VALIDATION, "ERROR: %s: verify-script-failed, txn %s, reason %s\n", __func__, tx.GetHash().ToString(), ScriptErrorString(serror));
         return state.Invalid(BlockValidationResult::DOS_100, "verify-cs-script-failed");
     }
 
-    static const bool fDebug = gArgs.IsArgSet("-debug");
 
     if (!CheckStakeKernelHash(chain_state, state, pindexPrev, nBits, *pindexKernel,
                               coin.nTxOffsetInBlock,
                               coin.nTime, coin.out.nValue, txin.prevout, tx.nTime,
-                              hashProofOfStake, fDebug))
+                              hashProofOfStake))
     {
         // may occur during initial download or if behind on block chain sync
-        LogPrintf("CheckProofOfStake() : INFO: check kernel failed on coinstake %s\n",
+        LogPrint(BCLog::VALIDATION, "CheckProofOfStake() : INFO: check kernel failed on coinstake %s\n",
                  tx.GetHash().ToString());
         return state.Invalid(BlockValidationResult::DOS_1, "prevout-not-found");
     }
