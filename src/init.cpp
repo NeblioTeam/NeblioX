@@ -1633,9 +1633,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         if (!g_txindex->Start(chainman.ActiveChainstate())) {
             return false;
         }
-    } else {
-        InitError(strprintf(_("Error: Transaction index is required for neblio as it operates with Proof of Stake")));
-        return false;
     }
 
     for (const auto& filter_type : g_enabled_filter_types) {
