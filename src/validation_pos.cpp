@@ -165,10 +165,6 @@ bool GetCoinAge(const CChainState& chain_state, const CTransaction& tx, const CC
     if (tx.IsCoinBase())
         return true;
 
-    // Transaction index is required to get to block header
-//    if (!g_txindex)
-//        return false;  // Transaction index not available
-
     for (const CTxIn& txin : tx.vin) {
         // First try finding the previous transaction in database
         const COutPoint &prevout = txin.prevout;
@@ -177,22 +173,7 @@ bool GetCoinAge(const CChainState& chain_state, const CTransaction& tx, const CC
         if (!view.GetCoin(prevout, coin))
             continue;  // previous transaction not in main chain
 
-//        CDiskTxPos postx;
-//        CTransactionRef txPrev;
-//        if (g_txindex->FindTxPosition(prevout.hash, postx))
         {
-//            CAutoFile file(OpenBlockFile(postx, true), SER_DISK, CLIENT_VERSION);
-//            CBlockHeader header;
-//            try {
-//                file >> header;
-//                fseek(file.Get(), postx.nTxOffset, SEEK_CUR);
-//                file >> txPrev;
-//            } catch (const std::exception &e) {
-//                return error("%s() : deserialize or I/O error in GetCoinAge()", __PRETTY_FUNCTION__);
-//            }
-//            if (txPrev->GetHash() != prevout.hash)
-//                return error("%s() : txid mismatch in GetCoinAge()", __PRETTY_FUNCTION__);
-
             CBlockIndex* pindex = chain_state.m_chain[coin.nHeight];
             if(!pindex) {
                 continue;
@@ -207,9 +188,6 @@ bool GetCoinAge(const CChainState& chain_state, const CTransaction& tx, const CC
 
             LogPrint(BCLog::VALIDATION, "coin age nValueIn=%-12lld nTimeDiff=%d bnCentSecond=%s\n", nValueIn, nEffectiveAge, bnCentSecond.ToString());
         }
-//        else {
-//            return error("%s() : tx missing in tx index in GetCoinAge()", __PRETTY_FUNCTION__);
-//        }
     }
 
 
@@ -222,15 +200,15 @@ bool GetCoinAge(const CChainState& chain_state, const CTransaction& tx, const CC
 // miner's coin stake reward based on coin age spent (coin-days)
 CAmount GetProofOfStakeReward(int64_t nCoinAge, CAmount nFees)
 {
-    // CBlockLocator locator;
-
     int64_t nRewardCoinYear = COIN_YEAR_REWARD; // 10% reward up to end
 
     CAmount nSubsidy = nCoinAge * nRewardCoinYear * 33 / (365 * 33 + 8);
-//    LogPrintf("coin-Subsidy %s\n", std::to_string(nSubsidy));
-//    LogPrintf("coin-Age %s\n", std::to_string(nCoinAge));
-//    LogPrintf("Coin Reward %s\n", std::to_string(nRewardCoinYear));
-//    LogPrintf("GetProofOfStakeReward(): create=%s nCoinAge=%s\n", FormatMoney(nSubsidy), std::to_string(nCoinAge));
+    if(LogAcceptCategory(BCLog::VALIDATION)) {
+        LogPrintf("coin-Subsidy %s\n", std::to_string(nSubsidy));
+        LogPrintf("coin-Age %s\n", std::to_string(nCoinAge));
+        LogPrintf("Coin Reward %s\n", std::to_string(nRewardCoinYear));
+        LogPrintf("GetProofOfStakeReward(): create=%s nCoinAge=%s\n", FormatMoney(nSubsidy), std::to_string(nCoinAge));
+    }
 
     return nSubsidy + nFees;
 }

@@ -385,7 +385,7 @@ bool CheckProofOfStake(const CChainState &chain_state, BlockValidationState &sta
     // Get transaction index for the previous transaction
     Coin coin;
     if (!chain_state.CoinsTip().GetCoin(txin.prevout, coin)) {
-        LogPrint(BCLog::VALIDATION, "CheckProofOfStake() : INFO: read txPrev failed for prevout: %s", txin.prevout.ToString());
+        LogPrint(BCLog::VALIDATION, "CheckProofOfStake() : INFO: read txPrev failed for prevout: %s\n", txin.prevout.ToString());
         return state.Invalid(BlockValidationResult::DOS_1, "prevout-not-found");
             // previous
             // transaction not
