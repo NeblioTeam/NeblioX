@@ -54,11 +54,14 @@ public:
     void Clear() {
         out.SetNull();
         fCoinBase = false;
+        fCoinStake = false;
         nHeight = 0;
+        nTime = 0;
+        nTxOffsetInBlock = 0;
     }
 
     //! empty constructor
-    Coin() : fCoinBase(false), nHeight(0) { }
+    Coin() : fCoinBase(false), fCoinStake(false), nTime(0), nTxOffsetInBlock(0), nHeight(0){ }
 
     bool IsCoinBase() const {
         return fCoinBase;

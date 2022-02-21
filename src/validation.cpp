@@ -1506,6 +1506,9 @@ int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out)
         if (!alternate.IsSpent()) {
             undo.nHeight = alternate.nHeight;
             undo.fCoinBase = alternate.fCoinBase;
+            undo.fCoinStake = alternate.fCoinStake;             // Neblio
+            undo.nTime = alternate.nTime;                       // Neblio
+            undo.nTxOffsetInBlock = alternate.nTxOffsetInBlock; // Neblio
         } else {
             return DISCONNECT_FAILED; // adding output for transaction without known metadata
         }
@@ -3569,12 +3572,16 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     bool accepted_header = m_blockman.AcceptBlockHeader(block, state, m_params, &pindex);
     CheckBlockIndex();
 
-    // if the block is invalid, don't add the block index to disk; block index is useless without valid blocks in PoS
-    BOOST_SCOPE_EXIT_ALL(&) {
+    const auto blockIndexReverserIfError = [&](){
+        // if the block is invalid, don't add the block index to disk; block index is useless without valid blocks in PoS
         if(state.IsInvalid()) {
             setDirtyBlockIndex.erase(pindex);
             LogPrintf("Acceptance of block (%s) or block index failed. Deleting block index\n", block.GetHash().ToString());
         }
+    };
+
+    BOOST_SCOPE_EXIT_ALL(&) {
+        blockIndexReverserIfError();
     };
 
     if (!accepted_header)
@@ -3650,6 +3657,8 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     } catch (const std::runtime_error& e) {
         return AbortNode(state, std::string("System error: ") + e.what());
     }
+
+    blockIndexReverserIfError();
 
     FlushStateToDisk(state, FlushStateMode::NONE);
 
