@@ -499,34 +499,55 @@ BOOST_AUTO_TEST_CASE(updatecoins_simulation_test)
 BOOST_AUTO_TEST_CASE(ccoins_serialization)
 {
     // Good example
-    CDataStream ss1(ParseHex("97f23c835800816115944e077fe7c803cfa57f29b36bf87c1d35"), SER_DISK, CLIENT_VERSION);
+    CDataStream ss1(ParseHex("97f23c835800816115944e077fe7c803cfa57f29b36bf87c1d350084f0c14e8f85d260"), SER_DISK, CLIENT_VERSION);
     Coin cc1;
     ss1 >> cc1;
     BOOST_CHECK_EQUAL(cc1.fCoinBase, false);
     BOOST_CHECK_EQUAL(cc1.nHeight, 203998U);
     BOOST_CHECK_EQUAL(cc1.out.nValue, CAmount{60000000000});
     BOOST_CHECK_EQUAL(HexStr(cc1.out.scriptPubKey), HexStr(GetScriptForDestination(PKHash(uint160(ParseHex("816115944e077fe7c803cfa57f29b36bf87c1d35"))))));
+    BOOST_CHECK_EQUAL(cc1.fCoinStake, false);
+    BOOST_CHECK_EQUAL(cc1.nTime, 12345678);
+    BOOST_CHECK_EQUAL(cc1.nTxOffsetInBlock, 33663456);
 
     // Good example
-    CDataStream ss2(ParseHex("8ddf77bbd123008c988f1a4a4de2161e0f50aac7f17e7f9555caa4"), SER_DISK, CLIENT_VERSION);
+    CDataStream ss1s(ParseHex("98820c827400816115944e077fe7c803cfa57f29b36bf87c1d350184ef8d768fc2d720"), SER_DISK, CLIENT_VERSION);
+    Coin cc1s;
+    ss1s >> cc1s;
+    BOOST_CHECK_EQUAL(cc1s.fCoinBase, false);
+    BOOST_CHECK_EQUAL(cc1s.nHeight, 204998U);
+    BOOST_CHECK_EQUAL(cc1s.out.nValue, CAmount{50000000000});
+    BOOST_CHECK_EQUAL(HexStr(cc1s.out.scriptPubKey), HexStr(GetScriptForDestination(PKHash(uint160(ParseHex("816115944e077fe7c803cfa57f29b36bf87c1d35"))))));
+    BOOST_CHECK_EQUAL(cc1s.fCoinStake, true);
+    BOOST_CHECK_EQUAL(cc1s.nTime, 12322678);
+    BOOST_CHECK_EQUAL(cc1s.nTxOffsetInBlock, 34663456);
+
+    // Good example
+    CDataStream ss2(ParseHex("8ddf77bbd123008c988f1a4a4de2161e0f50aac7f17e7f9555caa40084efe36e8fc28910"), SER_DISK, CLIENT_VERSION);
     Coin cc2;
     ss2 >> cc2;
     BOOST_CHECK_EQUAL(cc2.fCoinBase, true);
     BOOST_CHECK_EQUAL(cc2.nHeight, 120891U);
     BOOST_CHECK_EQUAL(cc2.out.nValue, 110397);
     BOOST_CHECK_EQUAL(HexStr(cc2.out.scriptPubKey), HexStr(GetScriptForDestination(PKHash(uint160(ParseHex("8c988f1a4a4de2161e0f50aac7f17e7f9555caa4"))))));
+    BOOST_CHECK_EQUAL(cc2.fCoinStake, false);
+    BOOST_CHECK_EQUAL(cc2.nTime, 12333678);
+    BOOST_CHECK_EQUAL(cc2.nTxOffsetInBlock, 34653456);
 
     // Smallest possible example
-    CDataStream ss3(ParseHex("000006"), SER_DISK, CLIENT_VERSION);
+    CDataStream ss3(ParseHex("000006000000"), SER_DISK, CLIENT_VERSION);
     Coin cc3;
     ss3 >> cc3;
     BOOST_CHECK_EQUAL(cc3.fCoinBase, false);
     BOOST_CHECK_EQUAL(cc3.nHeight, 0U);
     BOOST_CHECK_EQUAL(cc3.out.nValue, 0);
     BOOST_CHECK_EQUAL(cc3.out.scriptPubKey.size(), 0U);
+    BOOST_CHECK_EQUAL(cc3.fCoinStake, false);
+    BOOST_CHECK_EQUAL(cc3.nTime, 0);
+    BOOST_CHECK_EQUAL(cc3.nTxOffsetInBlock, 0);
 
     // scriptPubKey that ends beyond the end of the stream
-    CDataStream ss4(ParseHex("000007"), SER_DISK, CLIENT_VERSION);
+    CDataStream ss4(ParseHex("000007000000"), SER_DISK, CLIENT_VERSION);
     try {
         Coin cc4;
         ss4 >> cc4;
