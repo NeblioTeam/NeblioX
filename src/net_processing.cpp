@@ -3642,13 +3642,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         const CBlockIndex *pindex = nullptr;
         BlockValidationState state;
-        // TODO(Sam): No processing block headers
-        if (!m_chainman.ProcessNewBlockHeaders({cmpctblock.header}, state, m_chainparams, &pindex)) {
-            if (state.IsInvalid()) {
-                MaybePunishNodeForBlock(pfrom.GetId(), state, /*via_compact_block*/ true, "invalid header via cmpctblock");
-                return;
-            }
-        }
+        // Neblio: No processing block headers; if we ever enable compact blocks, this should not be part of it
+//        if (!m_chainman.ProcessNewBlockHeaders({cmpctblock.header}, state, m_chainparams, &pindex)) {
+//            if (state.IsInvalid()) {
+//                MaybePunishNodeForBlock(pfrom.GetId(), state, /*via_compact_block*/ true, "invalid header via cmpctblock");
+//                return;
+//            }
+//        }
 
         // When we succeed in decoding a block's txids from a cmpctblock
         // message we typically jump to the BLOCKTXN handling code, with a
@@ -3715,7 +3715,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
                  (fAlreadyInFlight && blockInFlightIt->second.first == pfrom.GetId())) {
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
-                // TODO(Sam): Double check that partial blocks work; keep in mind that block header processing happens above; we should store the block index of the partial block in memory in a special container (not with claimedToBeKnown) until the block is complete to avoid writing bogus headers
                 if (!BlockRequested(pfrom.GetId(), pindex, &queuedBlockIt)) {
                     if (!(*queuedBlockIt)->partialBlock)
                         (*queuedBlockIt)->partialBlock.reset(new PartiallyDownloadedBlock(&m_mempool));
