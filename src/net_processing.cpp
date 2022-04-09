@@ -698,7 +698,7 @@ struct CNodeState {
     //! Whether this peer wants invs or headers (when possible) for block announcements.
     bool fPreferHeaders{false};
     //! Whether this peer wants invs or cmpctblocks (when possible) for block announcements.
-    bool fPreferHeaderAndIDs{false};
+    const bool fPreferHeaderAndIDs{false};
     /**
       * Whether this peer will send us cmpctblocks if we request them.
       * This is not used to gate request logic, as we really only care about fSupportsDesiredCmpctVersion,
@@ -886,6 +886,9 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const BIVariant& block, std:
 
 void PeerManagerImpl::MaybeSetPeerAsAnnouncingHeaderAndIDs(NodeId nodeid)
 {
+    // disable compact blocks in Neblio
+    return;
+
     AssertLockHeld(cs_main);
 
     // Never request high-bandwidth mode from peers if we're blocks-only. Our
@@ -1945,16 +1948,16 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
             // instead we respond with the full, non-compact block.
             bool fPeerWantsWitness = State(pfrom.GetId())->fWantsCmpctWitness;
             int nSendFlags = fPeerWantsWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS;
-            if (CanDirectFetch() && pindex->nHeight >= m_chainman.ActiveChain().Height() - MAX_CMPCTBLOCK_DEPTH) {
-                if ((fPeerWantsWitness || !fWitnessesPresentInARecentCompactBlock) && a_recent_compact_block && a_recent_compact_block->header.GetHash() == pindex->GetBlockHash()) {
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, *a_recent_compact_block));
-                } else {
-                    CBlockHeaderAndShortTxIDs cmpctblock(*pblock, fPeerWantsWitness);
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
-                }
-            } else {
+//            if (CanDirectFetch() && pindex->nHeight >= m_chainman.ActiveChain().Height() - MAX_CMPCTBLOCK_DEPTH) {
+//                if ((fPeerWantsWitness || !fWitnessesPresentInARecentCompactBlock) && a_recent_compact_block && a_recent_compact_block->header.GetHash() == pindex->GetBlockHash()) {
+//                    m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, *a_recent_compact_block));
+//                } else {
+//                    CBlockHeaderAndShortTxIDs cmpctblock(*pblock, fPeerWantsWitness);
+//                    m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
+//                }
+//            } else {
                 m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCK, *pblock));
-            }
+//            }
         }
     }
 
@@ -2921,18 +2924,19 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // nodes)
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDHEADERS));
         }
-        if (pfrom.GetCommonVersion() >= SHORT_IDS_BLOCKS_VERSION) {
-            // Tell our peer we are willing to provide version 1 or 2 cmpctblocks
-            // However, we do not request new block announcements using
-            // cmpctblock messages.
-            // We send this to non-NODE NETWORK peers as well, because
-            // they may wish to request compact blocks from us
-            bool fAnnounceUsingCMPCTBLOCK = false;
-            uint64_t nCMPCTBLOCKVersion = 2;
-            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion));
-            nCMPCTBLOCKVersion = 1;
-            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion));
-        }
+        // Disable compact blocks
+//        if (pfrom.GetCommonVersion() >= SHORT_IDS_BLOCKS_VERSION) {
+//            // Tell our peer we are willing to provide version 1 or 2 cmpctblocks
+//            // However, we do not request new block announcements using
+//            // cmpctblock messages.
+//            // We send this to non-NODE NETWORK peers as well, because
+//            // they may wish to request compact blocks from us
+//            bool fAnnounceUsingCMPCTBLOCK = false;
+//            uint64_t nCMPCTBLOCKVersion = 2;
+//            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion));
+//            nCMPCTBLOCKVersion = 1;
+//            m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion));
+//        }
         pfrom.fSuccessfullyConnected = true;
         return;
     }
@@ -2944,26 +2948,27 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::SENDCMPCT) {
-        bool fAnnounceUsingCMPCTBLOCK = false;
-        uint64_t nCMPCTBLOCKVersion = 0;
-        vRecv >> fAnnounceUsingCMPCTBLOCK >> nCMPCTBLOCKVersion;
-        if (nCMPCTBLOCKVersion == 1 || nCMPCTBLOCKVersion == 2) {
-            LOCK(cs_main);
-            // fProvidesHeaderAndIDs is used to "lock in" version of compact blocks we send (fWantsCmpctWitness)
-            if (!State(pfrom.GetId())->fProvidesHeaderAndIDs) {
-                State(pfrom.GetId())->fProvidesHeaderAndIDs = true;
-                State(pfrom.GetId())->fWantsCmpctWitness = nCMPCTBLOCKVersion == 2;
-            }
-            if (State(pfrom.GetId())->fWantsCmpctWitness == (nCMPCTBLOCKVersion == 2)) { // ignore later version announces
-                State(pfrom.GetId())->fPreferHeaderAndIDs = fAnnounceUsingCMPCTBLOCK;
-                // save whether peer selects us as BIP152 high-bandwidth peer
-                // (receiving sendcmpct(1) signals high-bandwidth, sendcmpct(0) low-bandwidth)
-                pfrom.m_bip152_highbandwidth_from = fAnnounceUsingCMPCTBLOCK;
-            }
-            if (!State(pfrom.GetId())->fSupportsDesiredCmpctVersion) {
-                State(pfrom.GetId())->fSupportsDesiredCmpctVersion = (nCMPCTBLOCKVersion == 2);
-            }
-        }
+        // disable compact blocks in Neblio
+//        bool fAnnounceUsingCMPCTBLOCK = false;
+//        uint64_t nCMPCTBLOCKVersion = 0;
+//        vRecv >> fAnnounceUsingCMPCTBLOCK >> nCMPCTBLOCKVersion;
+//        if (nCMPCTBLOCKVersion == 1 || nCMPCTBLOCKVersion == 2) {
+//            LOCK(cs_main);
+//            // fProvidesHeaderAndIDs is used to "lock in" version of compact blocks we send (fWantsCmpctWitness)
+//            if (!State(pfrom.GetId())->fProvidesHeaderAndIDs) {
+//                State(pfrom.GetId())->fProvidesHeaderAndIDs = true;
+//                State(pfrom.GetId())->fWantsCmpctWitness = nCMPCTBLOCKVersion == 2;
+//            }
+//            if (State(pfrom.GetId())->fWantsCmpctWitness == (nCMPCTBLOCKVersion == 2)) { // ignore later version announces
+//                State(pfrom.GetId())->fPreferHeaderAndIDs = fAnnounceUsingCMPCTBLOCK;
+//                // save whether peer selects us as BIP152 high-bandwidth peer
+//                // (receiving sendcmpct(1) signals high-bandwidth, sendcmpct(0) low-bandwidth)
+//                pfrom.m_bip152_highbandwidth_from = fAnnounceUsingCMPCTBLOCK;
+//            }
+//            if (!State(pfrom.GetId())->fSupportsDesiredCmpctVersion) {
+//                State(pfrom.GetId())->fSupportsDesiredCmpctVersion = (nCMPCTBLOCKVersion == 2);
+//            }
+//        }
         return;
     }
 
@@ -3605,6 +3610,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::CMPCTBLOCK)
     {
+        // disable compact blocks in Neblio
+        LogPrint(BCLog::NET, "Unexpected blocktxn message received from peer %d\n", pfrom.GetId());
+        return;
+
         // Ignore cmpctblock received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::NET, "Unexpected cmpctblock message received from peer %d\n", pfrom.GetId());
@@ -3823,6 +3832,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::BLOCKTXN)
     {
+        // disable compact blocks in Neblio
+        LogPrint(BCLog::NET, "Unexpected blocktxn message received from peer %d\n", pfrom.GetId());
+        return;
+
         // Ignore blocktxn received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::NET, "Unexpected blocktxn message received from peer %d\n", pfrom.GetId());

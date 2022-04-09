@@ -3642,8 +3642,8 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
 
     // Header is valid/has work, merkle tree and segwit merkle tree are good...RELAY NOW
     // (but if it does not build on our best tip, let the SendMessages loop relay it)
-    if (!IsInitialBlockDownload() && m_chain.Tip() == pindex->pprev)
-        GetMainSignals().NewPoWValidBlock(pindex, pblock);
+//    if (!IsInitialBlockDownload() && m_chain.Tip() == pindex->pprev)
+//        GetMainSignals().NewPoWValidBlock(pindex, pblock);
 
     // Write block to history file
     if (fNewBlock) *fNewBlock = true;
@@ -3705,6 +3705,12 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
     }
 
     NotifyHeaderTip(ActiveChainstate());
+
+    // TODO(Sam): An optimization of block relaying should broadcast blocks once they're checked.
+    //            Bitcoin is happy to broadcast blocks with NewPoWValidBlock() signal once they're accepted.
+    //            This is not the best strategy for proof of stake unless we implement VIU.
+    // TODO(Sam): If we are to allow NewPoWValidBlock(), we should also consider that it uses compact blocks,
+    //            which we disable in Neblio
 
     BlockValidationState state; // Only used to report errors, not invalidity - ignore it
     if (!ActiveChainstate().ActivateBestChain(state, block)) {
