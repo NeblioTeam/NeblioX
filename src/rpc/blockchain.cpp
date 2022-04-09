@@ -235,12 +235,6 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* tip, const CBlockIn
 
     result.pushKV("tx", txs);
     result.pushKV("mint", ValueFromAmount(blockindex->nMint));
-
-    if (blockindex->pprev)
-        result.pushKV("previousblockhash", blockindex->pprev->GetBlockHash().GetHex());
-//    if (pnext)
-//        result.pushKV("nextblockhash", pnext->GetBlockHash().GetHex());
-    // TODO(Sam) fix the next block by checking the height
     result.pushKV("flags", strprintf("%s%s", blockindex->IsProofOfStake()? "proof-of-stake" : "proof-of-work", blockindex->GeneratedStakeModifier()? " stake-modifier": ""));
     result.pushKV("proofhash", blockindex->IsProofOfStake()? blockindex->hashProofOfStake.GetHex() : blockindex->GetBlockHash().GetHex());
     result.pushKV("entropybit", (int)blockindex->GetStakeEntropyBit());
