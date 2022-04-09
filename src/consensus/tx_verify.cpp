@@ -9,6 +9,8 @@
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
 #include <consensus/validation.h>
+#include "validation_pos.h"
+#include "params.h"
 
 // TODO remove the following dependencies
 #include <chain.h>
@@ -166,7 +168,7 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     return nSigOps;
 }
 
-bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee)
+bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee, const int coinbaseMaturity)
 {
     // are the actual inputs available?
     if (!inputs.HaveInputs(tx)) {
@@ -181,9 +183,14 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
         assert(!coin.IsSpent());
 
         // If prev is coinbase, check that it's matured
-        if (coin.IsCoinBase() && nSpendHeight - coin.nHeight < COINBASE_MATURITY) {
-            return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "bad-txns-premature-spend-of-coinbase",
+        if ((coin.IsCoinBase() || coin.IsCoinStake()) && nSpendHeight - coin.nHeight < coinbaseMaturity) {
+            return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "bad-txns-premature-spend-of-coinbase/coinstake",
                 strprintf("tried to spend coinbase at depth %d", nSpendHeight - coin.nHeight));
+        }
+
+        // peercoin: check transaction timestamp
+        if (coin.nTime > tx.nTime) {
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-spent-too-early", strprintf("%s : transaction timestamp earlier than input transaction at index %s; input time: %s vs current tx time: %s", __func__, std::to_string(i), coin.nTime, tx.nTime));
         }
 
         // Check for negative or overflow input values
@@ -193,18 +200,44 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
         }
     }
 
-    const CAmount value_out = tx.GetValueOut();
-    if (nValueIn < value_out) {
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-in-belowout",
-            strprintf("value in (%s) < value out (%s)", FormatMoney(nValueIn), FormatMoney(value_out)));
+    if(tx.IsCoinStake()) {
+        // TODO(Sam): Make sure that attempting to relay coinstake
+        // to the mempool is considered invalid, and basically every caller of this function
+        // this concern is raised because peercoin has checks done here, while this function is called also in the mempool
+    } else {
+        const CAmount value_out = tx.GetValueOut();
+        if (nValueIn < value_out) {
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-in-belowout",
+                                 strprintf("value in (%s) < value out (%s)", FormatMoney(nValueIn), FormatMoney(value_out)));
+        }
+
+        // Tally transaction fees
+        const CAmount txfee_aux = nValueIn - value_out;
+        if (!MoneyRange(txfee_aux)) {
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-fee-outofrange");
+        }
+
+        // peercoin: enforce transaction fees for every block
+        if (txfee_aux < GetPoSMinFeeRate(tx))
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-fee-not-enough");
+        txfee = txfee_aux;
     }
 
-    // Tally transaction fees
-    const CAmount txfee_aux = nValueIn - value_out;
-    if (!MoneyRange(txfee_aux)) {
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-fee-outofrange");
-    }
-
-    txfee = txfee_aux;
     return true;
+}
+
+CAmount GetPoSMinFeeRate(const CTransaction& tx)
+{
+    size_t nBytes = ::GetSerializeSize(tx, PROTOCOL_VERSION);
+    return GetPoSMinFeeRate(nBytes);
+}
+
+CAmount GetPoSMinFeeRate(size_t nBytes)
+{
+    CAmount nMinFee;
+    nMinFee = (1 + (CAmount)nBytes / 1000) * PERKB_TX_FEE;
+
+    if (!MoneyRange(nMinFee))
+        nMinFee = MAX_MONEY;
+    return nMinFee;
 }

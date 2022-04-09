@@ -7,6 +7,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+// TODO(Sam): All nTime instances for transactions in this file
+
 BOOST_FIXTURE_TEST_SUITE(merkle_tests, TestingSetup)
 
 static uint256 ComputeMerkleRootFromBranch(const uint256& leaf, const std::vector<uint256>& vMerkleBranch, uint32_t nIndex) {
@@ -201,6 +203,7 @@ BOOST_AUTO_TEST_CASE(merkle_test)
             for (int j = 0; j < ntx; j++) {
                 CMutableTransaction mtx;
                 mtx.nLockTime = j;
+                mtx.nTime = 0;
                 block.vtx[j] = MakeTransactionRef(std::move(mtx));
             }
             // Compute the root of the block before mutating it.

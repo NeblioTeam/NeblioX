@@ -230,6 +230,36 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
     }
 
     LOCK(wallet.cs_wallet);
+
+    // treat coinstake as a single "recieve" entry
+    if (wtx.IsCoinStake())
+    {
+        for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i)
+        {
+            const CTxOut& txout = wtx.tx->vout[i];
+            isminetype fIsMine = wallet.IsMine(txout);
+
+            // get my vout with positive output
+            if (!(fIsMine & filter) || txout.nValue <= 0)
+                continue;
+
+            // get address
+            CTxDestination address = CNoDestination();
+            ExtractDestination(txout.scriptPubKey, address);
+
+            // nfee is negative for coinstake generation, because we are gaining money from it
+            COutputEntry output = {address, -nFee, (int)i};
+            listReceived.push_back(output);
+            nFee = 0;
+            return;
+        }
+
+        // if we reach here there is probably a mistake
+        COutputEntry output = {CNoDestination(), 0, 0};
+        listReceived.push_back(output);
+        return;
+    }
+
     // Sent/received.
     for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i)
     {
@@ -336,6 +366,8 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse)
                 ret.m_mine_untrusted_pending += tx_credit_mine;
                 ret.m_watchonly_untrusted_pending += tx_credit_watchonly;
             }
+            if (wtx.IsCoinStake())
+                ret.m_mine_stake += TxGetCredit(wallet, *wtx.tx, ISMINE_ALL);
             ret.m_mine_immature += CachedTxGetImmatureCredit(wallet, wtx);
             ret.m_watchonly_immature += CachedTxGetImmatureWatchOnlyCredit(wallet, wtx);
         }

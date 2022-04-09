@@ -211,4 +211,7 @@ void BIP32Hash(const ChainCode &chainCode, unsigned int nChild, unsigned char he
  */
 CHashWriter TaggedHash(const std::string& tag);
 
+extern int32_t peercoinRandseed;
+uint32_t univHash(const uint256 &x);
+
 #endif // BITCOIN_HASH_H

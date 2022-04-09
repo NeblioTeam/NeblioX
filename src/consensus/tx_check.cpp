@@ -30,6 +30,9 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
         nValueOut += txout.nValue;
         if (!MoneyRange(nValueOut))
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-txouttotal-toolarge");
+        // Neblio: enforce minimum output amount
+//        if ((!txout.IsEmpty()) && txout.nValue < MIN_TXOUT_AMOUNT)
+//            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-txoutvalue-belowminimum");
     }
 
     // Check for duplicate inputs (see CVE-2018-17144)

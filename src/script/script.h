@@ -199,6 +199,9 @@ enum opcodetype
     OP_NOP9 = 0xb8,
     OP_NOP10 = 0xb9,
 
+    // cold staking
+    OP_CHECKCOLDSTAKEVERIFY = 0xd1,
+
     // Opcode added by BIP 342 (Tapscript)
     OP_CHECKSIGADD = 0xba,
 
@@ -528,6 +531,12 @@ public:
     bool IsPayToScriptHash() const;
     bool IsPayToWitnessScriptHash() const;
     bool IsWitnessProgram(int& version, std::vector<unsigned char>& program) const;
+
+    bool IsPayToColdStaking() const;
+    /**
+     * Checks if the scriptSig is for P2CS; if yes, returns the public key; if no returns std::nullopt
+     */
+    std::optional<std::vector<uint8_t>> GetPubKeyOfP2CSScriptSig() const;
 
     /** Called by IsStandardTx and P2SH/BIP62 VerifyScript (which makes it consensus-critical). */
     bool IsPushOnly(const_iterator pc) const;

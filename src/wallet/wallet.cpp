@@ -1468,7 +1468,7 @@ bool DummySignInput(const SigningProvider& provider, CTxIn &tx_in, const CTxOut 
     const CScript& scriptPubKey = txout.scriptPubKey;
     SignatureData sigdata;
 
-    if (!ProduceSignature(provider, use_max_sig ? DUMMY_MAXIMUM_SIGNATURE_CREATOR : DUMMY_SIGNATURE_CREATOR, scriptPubKey, sigdata)) {
+    if (!ProduceSignature(provider, use_max_sig ? DUMMY_MAXIMUM_SIGNATURE_CREATOR : DUMMY_SIGNATURE_CREATOR, scriptPubKey, sigdata, false)) {
         return false;
     }
     UpdateInput(tx_in, sigdata);
@@ -1720,7 +1720,7 @@ void CWallet::ReacceptWalletTransactions()
 
         int nDepth = GetTxDepthInMainChain(wtx);
 
-        if (!wtx.IsCoinBase() && (nDepth == 0 && !wtx.isAbandoned())) {
+        if (!wtx.IsCoinBase() && !wtx.IsCoinStake() && (nDepth == 0 && !wtx.isAbandoned())) {
             mapSorted.insert(std::make_pair(wtx.nOrderPos, &wtx));
         }
     }
@@ -1845,7 +1845,7 @@ bool CWallet::SignTransaction(CMutableTransaction& tx) const
         }
         const CWalletTx& wtx = mi->second;
         int prev_height = wtx.state<TxStateConfirmed>() ? wtx.state<TxStateConfirmed>()->confirmed_block_height : 0;
-        coins[input.prevout] = Coin(wtx.tx->vout[input.prevout.n], prev_height, wtx.IsCoinBase());
+        coins[input.prevout] = Coin(wtx.tx->vout[input.prevout.n], prev_height, wtx.IsCoinBase(), wtx.IsCoinStake(), wtx.tx->nTime, 0u);
     }
     std::map<int, bilingual_str> input_errors;
     return SignTransaction(tx, coins, SIGHASH_DEFAULT, input_errors);
@@ -2977,11 +2977,12 @@ int CWallet::GetTxDepthInMainChain(const CWalletTx& wtx) const
 
 int CWallet::GetTxBlocksToMaturity(const CWalletTx& wtx) const
 {
-    if (!wtx.IsCoinBase())
+    if (!wtx.IsCoinBase() && !wtx.IsCoinStake())
         return 0;
     int chain_depth = GetTxDepthInMainChain(wtx);
-    assert(chain_depth >= 0); // coinbase tx should not be conflicted
-    return std::max(0, (COINBASE_MATURITY+1) - chain_depth);
+    if(!wtx.IsCoinStake())
+        assert(chain_depth >= 0); // coinbase tx should not be conflicted
+    return std::max(0, (Params().GetConsensus().CoinbaseMaturity(GetLastBlockHeight())+1) - chain_depth);
 }
 
 bool CWallet::IsTxImmatureCoinBase(const CWalletTx& wtx) const

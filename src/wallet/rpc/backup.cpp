@@ -890,6 +890,12 @@ static std::string RecurseImportData(const CScript& script, ImportData& import_d
         import_data.used_keys[id] = true;
         return "";
     }
+    case TxoutType::COLDSTAKE: {
+        // we only include the delegator key because we expect that to have a relevant private key that are spendable
+        CKeyID id = CKeyID(uint160(solverdata[0]));
+        import_data.used_keys[id] = true;
+        return "";
+    }
     case TxoutType::SCRIPTHASH: {
         if (script_ctx == ScriptContext::P2SH) throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Trying to nest P2SH inside another P2SH");
         if (script_ctx == ScriptContext::WITNESS_V0) throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Trying to nest P2SH inside a P2WSH");

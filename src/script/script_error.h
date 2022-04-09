@@ -82,6 +82,9 @@ typedef enum ScriptError_t
     SCRIPT_ERR_OP_CODESEPARATOR,
     SCRIPT_ERR_SIG_FINDANDDELETE,
 
+    /* Cold-stake error */
+    SCRIPT_ERR_CHECKCOLDSTAKEVERIFY,
+
     SCRIPT_ERR_ERROR_COUNT
 } ScriptError;
 

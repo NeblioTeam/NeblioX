@@ -30,6 +30,9 @@ struct TxInUndoFormatter
             ::Serialize(s, (unsigned char)0);
         }
         ::Serialize(s, Using<TxOutCompression>(txout.out));
+        ::Serialize(s, txout.fCoinStake);
+        ::Serialize(s, txout.nTime);
+        ::Serialize(s, txout.nTxOffsetInBlock);
     }
 
     template<typename Stream>
@@ -46,6 +49,9 @@ struct TxInUndoFormatter
             ::Unserialize(s, VARINT(nVersionDummy));
         }
         ::Unserialize(s, Using<TxOutCompression>(txout.out));
+        ::Unserialize(s, txout.fCoinStake);
+        ::Unserialize(s, txout.nTime);
+        ::Unserialize(s, txout.nTxOffsetInBlock);
     }
 };
 

@@ -197,7 +197,7 @@ FUZZ_TARGET_INIT(coins_view, initialize_coins_view)
                 const CTransaction transaction{random_mutable_transaction};
                 bool is_spent = false;
                 for (const CTxOut& tx_out : transaction.vout) {
-                    if (Coin{tx_out, 0, transaction.IsCoinBase()}.IsSpent()) {
+                    if (Coin{tx_out, 0, transaction.IsCoinBase(), transaction.IsCoinStake(), transaction.nTime, 0u}.IsSpent()) {
                         is_spent = true;
                     }
                 }
@@ -208,9 +208,10 @@ FUZZ_TARGET_INIT(coins_view, initialize_coins_view)
                 }
                 bool expected_code_path = false;
                 const int height = fuzzed_data_provider.ConsumeIntegral<int>();
+                const int nTxOffset = fuzzed_data_provider.ConsumeIntegral<uint32_t>();
                 const bool possible_overwrite = fuzzed_data_provider.ConsumeBool();
                 try {
-                    AddCoins(coins_view_cache, transaction, height, possible_overwrite);
+                    AddCoins(coins_view_cache, transaction, height, nTxOffset, possible_overwrite);
                     expected_code_path = true;
                 } catch (const std::logic_error& e) {
                     if (e.what() == std::string{"Attempted to overwrite an unspent coin (when possible_overwrite is false)"}) {
@@ -237,7 +238,8 @@ FUZZ_TARGET_INIT(coins_view, initialize_coins_view)
                     // It is not allowed to call CheckTxInputs if CheckTransaction failed
                     return;
                 }
-                if (Consensus::CheckTxInputs(transaction, state, coins_view_cache, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, std::numeric_limits<int>::max()), tx_fee_out)) {
+                static const int COINBASE_MATURITY = 100;
+                if (Consensus::CheckTxInputs(transaction, state, coins_view_cache, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, std::numeric_limits<int>::max()), tx_fee_out, COINBASE_MATURITY)) {
                     assert(MoneyRange(tx_fee_out));
                 }
             },

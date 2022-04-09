@@ -24,6 +24,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+// TODO(Sam): All nTime instances for transactions in this file
+
 namespace miner_tests {
 struct MinerTestingSetup : public TestingSetup {
     void TestPackageSelection(const CChainParams& chainparams, const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, m_node.mempool->cs);

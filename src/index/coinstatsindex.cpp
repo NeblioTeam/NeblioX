@@ -12,6 +12,8 @@
 #include <undo.h>
 #include <validation.h>
 
+#include <boost/scope_exit.hpp>
+
 static constexpr uint8_t DB_BLOCK_HASH{'s'};
 static constexpr uint8_t DB_BLOCK_HEIGHT{'t'};
 static constexpr uint8_t DB_MUHASH{'M'};
@@ -135,9 +137,16 @@ bool CoinStatsIndex::WriteBlock(const CBlock& block, const CBlockIndex* pindex)
         bool is_bip30_block{(pindex->nHeight == 91722 && pindex->GetBlockHash() == uint256S("0x00000000000271a2dc26e7667f8419f2e15416dc6955e5a6c6cdf3f2574dd08e")) ||
                             (pindex->nHeight == 91812 && pindex->GetBlockHash() == uint256S("0x00000000000af0aed4792b1acee3d966af36cf5def14935db8de83d6f9306f2f"))};
 
+        const std::uint32_t blockHeaderSize = ::GetSerializeSize(block.GetBlockHeader());
+        std::uint32_t txPos = GetSizeOfCompactSize(block.vtx.size());
+
         // Add the new utxos created from the block
         for (size_t i = 0; i < block.vtx.size(); ++i) {
             const auto& tx{block.vtx.at(i)};
+
+            BOOST_SCOPE_EXIT_ALL(&) {
+                txPos += ::GetSerializeSize(tx);
+            };
 
             // Skip duplicate txid coinbase transactions (BIP30).
             if (is_bip30_block && tx->IsCoinBase()) {
@@ -148,7 +157,7 @@ bool CoinStatsIndex::WriteBlock(const CBlock& block, const CBlockIndex* pindex)
 
             for (uint32_t j = 0; j < tx->vout.size(); ++j) {
                 const CTxOut& out{tx->vout[j]};
-                Coin coin{out, pindex->nHeight, tx->IsCoinBase()};
+                Coin coin{out, pindex->nHeight, tx->IsCoinBase(), tx->IsCoinStake(), tx->nTime, blockHeaderSize + txPos};
                 COutPoint outpoint{tx->GetHash(), j};
 
                 // Skip unspendable coins
@@ -405,14 +414,21 @@ bool CoinStatsIndex::ReverseBlock(const CBlock& block, const CBlockIndex* pindex
         }
     }
 
+    const std::uint32_t blockHeaderSize = ::GetSerializeSize(block.GetBlockHeader());
+    std::uint32_t txPos = GetSizeOfCompactSize(block.vtx.size());
+
     // Remove the new UTXOs that were created from the block
     for (size_t i = 0; i < block.vtx.size(); ++i) {
         const auto& tx{block.vtx.at(i)};
 
+        BOOST_SCOPE_EXIT_ALL(&) {
+            txPos += ::GetSerializeSize(tx);
+        };
+
         for (uint32_t j = 0; j < tx->vout.size(); ++j) {
             const CTxOut& out{tx->vout[j]};
             COutPoint outpoint{tx->GetHash(), j};
-            Coin coin{out, pindex->nHeight, tx->IsCoinBase()};
+            Coin coin{out, pindex->nHeight, tx->IsCoinBase(), tx->IsCoinStake(), tx->nTime, blockHeaderSize + txPos};
 
             // Skip unspendable coins
             if (coin.out.scriptPubKey.IsUnspendable()) {

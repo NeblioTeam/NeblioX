@@ -234,6 +234,13 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* tip, const CBlockIn
     }
 
     result.pushKV("tx", txs);
+    result.pushKV("mint", ValueFromAmount(blockindex->nMint));
+    result.pushKV("flags", strprintf("%s%s", blockindex->IsProofOfStake()? "proof-of-stake" : "proof-of-work", blockindex->GeneratedStakeModifier()? " stake-modifier": ""));
+    result.pushKV("proofhash", blockindex->IsProofOfStake()? blockindex->hashProofOfStake.GetHex() : blockindex->GetBlockHash().GetHex());
+    result.pushKV("entropybit", (int)blockindex->GetStakeEntropyBit());
+    result.pushKV("modifier", strprintf("%016llx", blockindex->nStakeModifier));
+    result.pushKV("modifierchecksum", strprintf("%08x", blockindex->nStakeModifierChecksum));
+    result.pushKV("blocksignature", HexStr(block.vchBlockSig));
 
     return result;
 }
@@ -1852,7 +1859,7 @@ static RPCHelpMan getchaintxstats()
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     const CBlockIndex* pindex;
-    int blockcount = 30 * 24 * 60 * 60 / Params().GetConsensus().nPowTargetSpacing; // By default: 1 month
+    int blockcount = 30 * 24 * 60 * 60 / Params().GetConsensus().nStakeTargetSpacingV2; // By default: 1 month
 
     if (request.params[1].isNull()) {
         LOCK(cs_main);

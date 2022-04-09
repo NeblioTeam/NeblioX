@@ -6,6 +6,8 @@
 #include <script/signingprovider.h>
 #include <test/util/transaction_utils.h>
 
+// TODO(Sam): All nTime instances for transactions in this file
+
 CMutableTransaction BuildCreditingTransaction(const CScript& scriptPubKey, int nValue)
 {
     CMutableTransaction txCredit;
@@ -58,14 +60,14 @@ std::vector<CMutableTransaction> SetupDummyInputs(FillableSigningProvider& keyst
     dummyTransactions[0].vout[0].scriptPubKey << ToByteVector(key[0].GetPubKey()) << OP_CHECKSIG;
     dummyTransactions[0].vout[1].nValue = nValues[1];
     dummyTransactions[0].vout[1].scriptPubKey << ToByteVector(key[1].GetPubKey()) << OP_CHECKSIG;
-    AddCoins(coinsRet, CTransaction(dummyTransactions[0]), 0);
+    AddCoins(coinsRet, CTransaction(dummyTransactions[0]), 0, 0u);
 
     dummyTransactions[1].vout.resize(2);
     dummyTransactions[1].vout[0].nValue = nValues[2];
     dummyTransactions[1].vout[0].scriptPubKey = GetScriptForDestination(PKHash(key[2].GetPubKey()));
     dummyTransactions[1].vout[1].nValue = nValues[3];
     dummyTransactions[1].vout[1].scriptPubKey = GetScriptForDestination(PKHash(key[3].GetPubKey()));
-    AddCoins(coinsRet, CTransaction(dummyTransactions[1]), 0);
+    AddCoins(coinsRet, CTransaction(dummyTransactions[1]), 0, 0u);
 
     return dummyTransactions;
 }

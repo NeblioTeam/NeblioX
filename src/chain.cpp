@@ -105,6 +105,29 @@ const CBlockIndex* CBlockIndex::GetAncestor(int height) const
     return pindexWalk;
 }
 
+bool CBlockIndex::GeneratedStakeModifier() const { return (nFlags & BLOCK_STAKE_MODIFIER); }
+
+uint32_t CBlockIndex::GetStakeEntropyBit() const { return ((nFlags & BLOCK_STAKE_ENTROPY) >> 1); }
+
+void CBlockIndex::SetStakeEntropyBit(bool nEntropyBit)
+{
+    nFlags |= (nEntropyBit ? BLOCK_STAKE_ENTROPY : 0);
+}
+
+void CBlockIndex::SetStakeModifier(uint64_t nModifier, bool fGeneratedStakeModifier)
+{
+    nStakeModifier = nModifier;
+    if (fGeneratedStakeModifier)
+        nFlags |= BLOCK_STAKE_MODIFIER;
+}
+
+uint32_t CBlockIndex::ConstructFlags(bool isProofOfStake, bool stakeEntropyBit, bool generatedStakeModifier)
+{
+    return ((uint32_t)isProofOfStake         << BLOCK_PROOF_OF_STAKE_BIT) |
+           ((uint32_t)stakeEntropyBit        << BLOCK_STAKE_ENTROPY_BIT) |
+           ((uint32_t)generatedStakeModifier << BLOCK_STAKE_MODIFIER_BIT);
+}
+
 CBlockIndex* CBlockIndex::GetAncestor(int height)
 {
     return const_cast<CBlockIndex*>(static_cast<const CBlockIndex*>(this)->GetAncestor(height));
@@ -116,12 +139,12 @@ void CBlockIndex::BuildSkip()
         pskip = pprev->GetAncestor(GetSkipHeight(nHeight));
 }
 
-arith_uint256 GetBlockProof(const CBlockIndex& block)
+arith_uint256 GetBlockProofFromBits(uint32_t nBits)
 {
     arith_uint256 bnTarget;
     bool fNegative;
     bool fOverflow;
-    bnTarget.SetCompact(block.nBits, &fNegative, &fOverflow);
+    bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
     if (fNegative || fOverflow || bnTarget == 0)
         return 0;
     // We need to compute 2**256 / (bnTarget+1), but we can't represent 2**256
@@ -129,6 +152,11 @@ arith_uint256 GetBlockProof(const CBlockIndex& block)
     // as bnTarget+1, it is equal to ((2**256 - bnTarget - 1) / (bnTarget+1)) + 1,
     // or ~bnTarget / (bnTarget+1) + 1.
     return (~bnTarget / (bnTarget + 1)) + 1;
+}
+
+arith_uint256 GetBlockProof(const CBlockIndex& block)
+{
+    return GetBlockProofFromBits(block.nBits);
 }
 
 int64_t GetBlockProofEquivalentTime(const CBlockIndex& to, const CBlockIndex& from, const CBlockIndex& tip, const Consensus::Params& params)
@@ -141,7 +169,7 @@ int64_t GetBlockProofEquivalentTime(const CBlockIndex& to, const CBlockIndex& fr
         r = from.nChainWork - to.nChainWork;
         sign = -1;
     }
-    r = r * arith_uint256(params.nPowTargetSpacing) / GetBlockProof(tip);
+    r = r * arith_uint256(params.nStakeTargetSpacingV1) / GetBlockProof(tip);
     if (r.bits() > 63) {
         return sign * std::numeric_limits<int64_t>::max();
     }

@@ -68,6 +68,7 @@ enum class IsMineResult
 {
     NO = 0,         //!< Not ours
     WATCH_ONLY = 1, //!< Included in watch-only balance
+    STAKE_ONLY = 1, //!< Included in stake-only balance (cold-staking)
     SPENDABLE = 2,  //!< Included in all balances
     INVALID = 3,    //!< Not spendable by anyone (uncompressed pubkey in segwit, P2SH inside P2SH or witness, witness inside witness)
 };
@@ -199,6 +200,21 @@ IsMineResult IsMineInner(const LegacyScriptPubKeyMan& keystore, const CScript& s
         if (HaveKeys(keys, keystore)) {
             ret = std::max(ret, IsMineResult::SPENDABLE);
         }
+        break;
+    }
+    case TxoutType::COLDSTAKE:
+    {
+        CKeyID stakeKeyID     = CKeyID(uint160(vSolutions[0]));
+        bool   stakeKeyIsMine = keystore.HaveKey(stakeKeyID);
+        CKeyID ownerKeyID     = CKeyID(uint160(vSolutions[1]));
+        bool   spendKeyIsMine = keystore.HaveKey(ownerKeyID);
+
+        if (spendKeyIsMine && stakeKeyIsMine)
+            return IsMineResult::SPENDABLE;
+        else if (stakeKeyIsMine)
+            return IsMineResult::STAKE_ONLY;
+        else if (spendKeyIsMine)
+            return IsMineResult::SPENDABLE;
         break;
     }
     } // no default case, so the compiler can warn about missing cases
@@ -581,14 +597,15 @@ std::unique_ptr<SigningProvider> LegacyScriptPubKeyMan::GetSolvingProvider(const
 bool LegacyScriptPubKeyMan::CanProvide(const CScript& script, SignatureData& sigdata)
 {
     IsMineResult ismine = IsMineInner(*this, script, IsMineSigVersion::TOP, /* recurse_scripthash= */ false);
-    if (ismine == IsMineResult::SPENDABLE || ismine == IsMineResult::WATCH_ONLY) {
+    if (ismine == IsMineResult::SPENDABLE || ismine == IsMineResult::STAKE_ONLY || ismine == IsMineResult::WATCH_ONLY) {
         // If ismine, it means we recognize keys or script ids in the script, or
         // are watching the script itself, and we can at least provide metadata
         // or solving information, even if not able to sign fully.
         return true;
     } else {
+        // TODO(Sam): Cold-staking here
         // If, given the stuff in sigdata, we could make a valid sigature, then we can provide for this script
-        ProduceSignature(*this, DUMMY_SIGNATURE_CREATOR, script, sigdata);
+        ProduceSignature(*this, DUMMY_SIGNATURE_CREATOR, script, sigdata, false);
         if (!sigdata.signatures.empty()) {
             // If we could make signatures, make sure we have a private key to actually make a signature
             bool has_privkeys = false;
@@ -1425,7 +1442,7 @@ void LegacyScriptPubKeyMan::LearnRelatedScripts(const CPubKey& key, OutputType t
         CTxDestination witdest = WitnessV0KeyHash(key.GetID());
         CScript witprog = GetScriptForDestination(witdest);
         // Make sure the resulting program is solvable.
-        assert(IsSolvable(*this, witprog));
+        assert(IsSolvable(*this, witprog, false));
         AddCScript(witprog);
     }
 }

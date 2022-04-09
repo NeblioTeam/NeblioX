@@ -80,7 +80,9 @@ public:
         SendToOther,
         RecvWithAddress,
         RecvFromOther,
-        SendToSelf
+        SendToSelf,
+        StakeMint
+        // TODO(Sam): Add cold-staked types (delegator and staker)
     };
 
     /** Number of confirmation recommended for accepting a transaction */

@@ -299,7 +299,7 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
     std::unique_ptr<CDBIterator> pcursor(NewIterator());
 
     pcursor->Seek(std::make_pair(DB_BLOCK_INDEX, uint256()));
-
+    std::size_t count = 0;
     // Load m_block_index
     while (pcursor->Valid()) {
         if (ShutdownRequested()) return false;
@@ -322,10 +322,21 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
 
-                if (!CheckProofOfWork(pindexNew->GetBlockHash(), pindexNew->nBits, consensusParams))
+                // Neblio related block index fields
+                pindexNew->nMint          = diskindex.nMint;
+                pindexNew->nMoneySupply   = diskindex.nMoneySupply;
+                pindexNew->nFlags         = diskindex.nFlags;
+                pindexNew->nStakeModifier = diskindex.nStakeModifier;
+                pindexNew->nStakeModifierChecksum = diskindex.nStakeModifierChecksum;
+                pindexNew->prevoutStake   = diskindex.prevoutStake;
+                pindexNew->nStakeTime     = diskindex.nStakeTime;
+                pindexNew->hashProofOfStake = diskindex.hashProofOfStake;
+
+                if (pindexNew->IsProofOfWork() && !CheckProofOfWork(pindexNew->GetBlockHash(), pindexNew->nBits, consensusParams))
                     return error("%s: CheckProofOfWork failed: %s", __func__, pindexNew->ToString());
 
                 pcursor->Next();
+                count++;
             } else {
                 return error("%s: failed to read value", __func__);
             }
@@ -352,8 +363,11 @@ public:
     //! at which height this transaction was included in the active block chain
     int nHeight;
 
+    // Neblio: whether transaction is a coinstake
+    bool fCoinStake;
+
     //! empty constructor
-    CCoins() : fCoinBase(false), vout(0), nHeight(0) { }
+    CCoins() : fCoinBase(false), vout(0), nHeight(0), fCoinStake(false) { }
 
     template<typename Stream>
     void Unserialize(Stream &s) {
@@ -403,6 +417,9 @@ bool CCoinsViewDB::Upgrade() {
         return true;
     }
 
+    // Upgrade is not supported in neblio
+    return false;
+
     int64_t count = 0;
     LogPrintf("Upgrading utxo-set database...\n");
     LogPrintf("[0%%]..."); /* Continued */
@@ -434,7 +451,7 @@ bool CCoinsViewDB::Upgrade() {
             COutPoint outpoint(key.second, 0);
             for (size_t i = 0; i < old_coins.vout.size(); ++i) {
                 if (!old_coins.vout[i].IsNull() && !old_coins.vout[i].scriptPubKey.IsUnspendable()) {
-                    Coin newcoin(std::move(old_coins.vout[i]), old_coins.nHeight, old_coins.fCoinBase);
+                    Coin newcoin(std::move(old_coins.vout[i]), old_coins.nHeight, old_coins.fCoinBase, old_coins.fCoinStake, GetTimeSeconds(), 0u);
                     outpoint.n = i;
                     CoinEntry entry(&outpoint);
                     batch.Write(entry, newcoin);

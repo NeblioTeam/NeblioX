@@ -15,6 +15,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+// TODO(Sam): All nTime instances for transactions in this file
+
 class CPartialMerkleTreeTester : public CPartialMerkleTree
 {
 public:

@@ -1,4 +1,4 @@
-// Copyright (c) 2009-2010 Satoshi Nakamoto
+﻿// Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2020 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -11,6 +11,7 @@
 #include <pubkey.h>
 #include <script/script.h>
 #include <uint256.h>
+#include <logging.h>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -214,7 +215,7 @@ bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned i
     return true;
 }
 
-bool static CheckPubKeyEncoding(const valtype &vchPubKey, unsigned int flags, const SigVersion &sigversion, ScriptError* serror) {
+bool CheckPubKeyEncoding(const valtype &vchPubKey, unsigned int flags, const SigVersion &sigversion, ScriptError* serror) {
     if ((flags & SCRIPT_VERIFY_STRICTENC) != 0 && !IsCompressedOrUncompressedPubKey(vchPubKey)) {
         return set_error(serror, SCRIPT_ERR_PUBKEYTYPE);
     }
@@ -1237,7 +1238,13 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     }
                 }
                 break;
-
+                case OP_CHECKCOLDSTAKEVERIFY: {
+                    // check it is used in a valid cold stake transaction.
+                    if (!checker.CheckColdStake(script)) {
+                        return set_error(serror, SCRIPT_ERR_CHECKCOLDSTAKEVERIFY);
+                    }
+                }
+                break;
                 default:
                     return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
             }
@@ -1348,6 +1355,8 @@ public:
     void Serialize(S &s) const {
         // Serialize nVersion
         ::Serialize(s, txTo.nVersion);
+        // Serialize nTime
+        ::Serialize(s, txTo.nTime);
         // Serialize vin
         unsigned int nInputs = fAnyoneCanPay ? 1 : txTo.vin.size();
         ::WriteCompactSize(s, nInputs);
@@ -1617,6 +1626,7 @@ uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn
         CHashWriter ss(SER_GETHASH, 0);
         // Version
         ss << txTo.nVersion;
+        ss << txTo.nTime;
         // Input prevouts/nSequence (none/all, depending on flags)
         ss << hashPrevouts;
         ss << hashSequence;
@@ -1752,6 +1762,41 @@ bool GenericTransactionSignatureChecker<T>::CheckLockTime(const CScriptNum& nLoc
     // required to prove correct CHECKLOCKTIMEVERIFY execution.
     if (CTxIn::SEQUENCE_FINAL == txTo->vin[nIn].nSequence)
         return false;
+
+    return true;
+}
+
+template <class T>
+bool GenericTransactionSignatureChecker<T>::CheckColdStake(const CScript& script) const
+{
+    if(!txTo) {
+        LogPrintf("CRITICAL: While verifying cold-stake, the txTo pointer is null");
+        return false;
+    }
+
+    // tx is a coinstake tx
+    if (!txTo->IsCoinStake())
+        return false;
+
+    if (txTo->vin.empty())
+        return false;
+
+    const std::optional<std::vector<uint8_t>> firstPubKey =
+        txTo->vin[0].scriptSig.GetPubKeyOfP2CSScriptSig();
+    if (!firstPubKey)
+        return false; // this is not P2CS
+
+    // all inputs must be P2CS and must be paying to the same pubkey
+    for (unsigned int i = 1; i < txTo->vin.size(); i++) {
+        if (txTo->vin[i].scriptSig.GetPubKeyOfP2CSScriptSig() != firstPubKey)
+            return false;
+    }
+
+    // all outputs except first (coinstake marker)
+    // have the same pubKeyScript and it matches the script we are spending
+    for (unsigned int i = 1; i < txTo->vout.size(); i++)
+        if (txTo->vout[i].scriptPubKey != script)
+            return false;
 
     return true;
 }

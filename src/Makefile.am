@@ -169,6 +169,7 @@ BITCOIN_CORE_H = \
   net.h \
   net_permissions.h \
   net_processing.h \
+  net_processing_pos.h \
   net_types.h \
   netaddress.h \
   netbase.h \
@@ -185,6 +186,7 @@ BITCOIN_CORE_H = \
   node/utxo_snapshot.h \
   noui.h \
   outputtype.h \
+  orphanblocks.h \
   policy/feerate.h \
   policy/fees.h \
   policy/packages.h \
@@ -338,6 +340,7 @@ libbitcoin_server_a_SOURCES = \
   mapport.cpp \
   net.cpp \
   net_processing.cpp \
+  net_processing_pos.cpp \
   node/blockstorage.cpp \
   node/coin.cpp \
   node/coinstats.cpp \
@@ -349,6 +352,7 @@ libbitcoin_server_a_SOURCES = \
   node/transaction.cpp \
   node/ui_interface.cpp \
   noui.cpp \
+  orphanblocks.cpp \
   policy/fees.cpp \
   policy/packages.cpp \
   policy/rbf.cpp \
@@ -371,6 +375,8 @@ libbitcoin_server_a_SOURCES = \
   txorphanage.cpp \
   txrequest.cpp \
   validation.cpp \
+  pos/kernel.cpp \
+  validation_pos.cpp \
   validationinterface.cpp \
   versionbits.cpp \
   $(BITCOIN_CORE_H)
@@ -521,6 +527,9 @@ libbitcoin_consensus_a_SOURCES = \
   script/script.h \
   script/script_error.cpp \
   script/script_error.h \
+  crypto/scrypt.cpp \
+  crypto/scrypt-sse2.cpp \
+  crypto/scrypt.h \
   serialize.h \
   span.h \
   tinyformat.h \

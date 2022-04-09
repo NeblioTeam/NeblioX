@@ -12,6 +12,7 @@
 #include <primitives/block.h>
 #include <tinyformat.h>
 #include <uint256.h>
+#include <util/moneystr.h>
 
 #include <vector>
 
@@ -207,6 +208,29 @@ public:
     //! (memory only) Maximum nTime in the chain up to and including this block.
     unsigned int nTimeMax{0};
 
+    // proof-of-stake specific fields
+    // peercoin: money supply related block index fields
+    int64_t nMint{0};
+    int64_t nMoneySupply{0};
+
+    static const int BLOCK_PROOF_OF_STAKE_BIT = 0;
+    static const int BLOCK_STAKE_ENTROPY_BIT  = 1;
+    static const int BLOCK_STAKE_MODIFIER_BIT = 2;
+
+    // peercoin: proof-of-stake related block index fields
+    uint32_t nFlags{0};  // peercoin: block index flags
+    enum
+    {
+        BLOCK_PROOF_OF_STAKE = (1 << BLOCK_PROOF_OF_STAKE_BIT), // is proof-of-stake block
+        BLOCK_STAKE_ENTROPY  = (1 << BLOCK_STAKE_ENTROPY_BIT), // entropy bit for stake modifier
+        BLOCK_STAKE_MODIFIER = (1 << BLOCK_STAKE_MODIFIER_BIT), // generated stake modifier
+    };
+    uint64_t nStakeModifier{0}; // hash modifier for proof-of-stake
+    uint32_t nStakeModifierChecksum{0}; // checksum of index
+    COutPoint prevoutStake{};
+    unsigned int nStakeTime{0};
+    uint256 hashProofOfStake{};
+
     CBlockIndex()
     {
     }
@@ -293,11 +317,22 @@ public:
 
     std::string ToString() const
     {
-        return strprintf("CBlockIndex(pprev=%p, nHeight=%d, merkle=%s, hashBlock=%s)",
-            pprev, nHeight,
-            hashMerkleRoot.ToString(),
-            GetBlockHash().ToString());
+        return strprintf("CBlockIndex(nprev=%08x, nFile=%d, nHeight=%d, nMint=%s, nMoneySupply=%s, nFlags=(%s)(%d)(%s), nStakeModifier=%016llx, nStakeModifierChecksum=%08x, hashProofOfStake=%s, prevoutStake=(%s), nStakeTime=%d merkle=%s, hashBlock=%s)",
+                         pprev, nFile, nHeight,
+                         FormatMoney(nMint), FormatMoney(nMoneySupply),
+                         GeneratedStakeModifier() ? "MOD" : "-", GetStakeEntropyBit(), IsProofOfStake()? "PoS" : "PoW",
+                         nStakeModifier, nStakeModifierChecksum,
+                         hashProofOfStake.ToString(),
+                         prevoutStake.ToString(), nStakeTime,
+                         hashMerkleRoot.ToString().substr(0,10),
+                         GetBlockHash().ToString().substr(0,20));
     }
+
+    bool IsProofOfWork() const { return !(nFlags & BLOCK_PROOF_OF_STAKE); }
+
+    bool IsProofOfStake() const { return (nFlags & BLOCK_PROOF_OF_STAKE); }
+
+    void SetProofOfStake() { nFlags |= BLOCK_PROOF_OF_STAKE; }
 
     //! Check whether this block index entry is valid up to the passed validity level.
     bool IsValid(enum BlockStatus nUpTo = BLOCK_VALID_TRANSACTIONS) const
@@ -338,8 +373,14 @@ public:
     //! Efficiently find an ancestor of this block.
     CBlockIndex* GetAncestor(int height);
     const CBlockIndex* GetAncestor(int height) const;
+    bool GeneratedStakeModifier() const;
+    uint32_t GetStakeEntropyBit() const;
+    void SetStakeEntropyBit(bool nEntropyBit);
+    void SetStakeModifier(uint64_t nModifier, bool fGeneratedStakeModifier);
+    static uint32_t ConstructFlags(bool isProofOfStake, bool stakeEntropyBit, bool generatedStakeModifier);
 };
 
+arith_uint256 GetBlockProofFromBits(uint32_t nBits);
 arith_uint256 GetBlockProof(const CBlockIndex& block);
 /** Return the time it would take to redo the work difference between from and to, assuming the current hashrate corresponds to the difficulty at tip, in seconds. */
 int64_t GetBlockProofEquivalentTime(const CBlockIndex& to, const CBlockIndex& from, const CBlockIndex& tip, const Consensus::Params&);
@@ -372,6 +413,19 @@ public:
         if (obj.nStatus & (BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO)) READWRITE(VARINT_MODE(obj.nFile, VarIntMode::NONNEGATIVE_SIGNED));
         if (obj.nStatus & BLOCK_HAVE_DATA) READWRITE(VARINT(obj.nDataPos));
         if (obj.nStatus & BLOCK_HAVE_UNDO) READWRITE(VARINT(obj.nUndoPos));
+
+        READWRITE(obj.nMint);
+        READWRITE(obj.nMoneySupply);
+        READWRITE(obj.nFlags);
+        READWRITE(obj.nStakeModifier);
+        READWRITE(obj.nStakeModifierChecksum);
+
+        if (obj.nFlags & BLOCK_PROOF_OF_STAKE)
+        {
+            READWRITE(obj.prevoutStake);
+            READWRITE(obj.nStakeTime);
+            READWRITE(obj.hashProofOfStake);
+        }
 
         // block header
         READWRITE(obj.nVersion);
