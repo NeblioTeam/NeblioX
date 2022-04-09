@@ -160,8 +160,8 @@ public:
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,53);  // Neblio: addresses begin with 'N'
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,112); // Neblio: addresses begin with 'n'
         base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,128+53);
-        base58Prefixes[EXT_PUBLIC_KEY] = {0x05, 0x89, 0xB4, 0x2E}; // TODO(Sam): choose a good value
-        base58Prefixes[EXT_SECRET_KEY] = {0x05, 0x89, 0xAE, 0x54}; // TODO(Sam): choose a good value
+        base58Prefixes[EXT_PUBLIC_KEY] = {0xe1, 0x1a, 0x38, 0xe1};
+        base58Prefixes[EXT_SECRET_KEY] = {0xef, 0x3b, 0xe9, 0xea};
 
         bech32_hrp = "nb";
 
@@ -350,8 +350,8 @@ public:
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,65);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,127);
         base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,128+65);
-        base58Prefixes[EXT_PUBLIC_KEY] = {0x06, 0x35, 0x87, 0xCF};
-        base58Prefixes[EXT_SECRET_KEY] = {0x06, 0x35, 0x83, 0x94};
+        base58Prefixes[EXT_PUBLIC_KEY] = {0xe1, 0x1a, 0x38, 0xe2};
+        base58Prefixes[EXT_SECRET_KEY] = {0xef, 0x3b, 0xe9, 0xeb};
 
         bech32_hrp = "tnb";
 
@@ -510,8 +510,8 @@ public:
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,111);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,196);
         base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,239);
-        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
-        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
+        base58Prefixes[EXT_PUBLIC_KEY] = {0xe1, 0x1a, 0x38, 0xe3};
+        base58Prefixes[EXT_SECRET_KEY] = {0xef, 0x3b, 0xe9, 0xec};
 
         bech32_hrp = "tb";
 
@@ -612,8 +612,8 @@ public:
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,111);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,196);
         base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,239);
-        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
-        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
+        base58Prefixes[EXT_PUBLIC_KEY] = {0xe1, 0x1a, 0x38, 0xe4};
+        base58Prefixes[EXT_SECRET_KEY] = {0xef, 0x3b, 0xe9, 0xed};
 
         bech32_hrp = "bcrt";
     }
