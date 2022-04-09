@@ -36,12 +36,13 @@ public:
     //! whether containing transaction was a coinbase
     unsigned int fCoinBase : 1;
 
-    // peercoin: whether transaction is a coinstake
+    // Neblio: whether transaction is a coinstake
     bool fCoinStake;
 
-    // peercoin: transaction timestamp
+    // Neblio: transaction timestamp
     uint32_t nTime;
 
+    // Neblio: offset in block for stake kernel hash calculation
     uint32_t nTxOffsetInBlock;
 
     //! at which height this containing transaction was included in the active block chain
